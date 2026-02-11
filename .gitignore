@@ -1,14 +1,12 @@
+# Build folders
 bin/
 obj/
+
+# User-specific files
 *.user
 *.suo
 .vs/
-.idea/
-*.swp
-*.swo
-*~
+
+# OS files
 .DS_Store
-packages/
-.vscode/
-*.log
-dist/
+Thumbs.db
