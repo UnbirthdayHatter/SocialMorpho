@@ -1,5 +1,6 @@
 using Dalamud.Configuration;
 using Dalamud.Plugin;
+using SocialMorpho.Data;
 using System;
 using System.Collections.Generic;
 
@@ -18,9 +19,9 @@ public class Configuration : IPluginConfiguration
     public List<QuestData> SavedQuests { get; set; } = new();
 
     [NonSerialized]
-    private DalamudPluginInterface? PluginInterface;
+    private IDalamudPluginInterface? PluginInterface;
 
-    public void Initialize(DalamudPluginInterface pluginInterface)
+    public void Initialize(IDalamudPluginInterface pluginInterface)
     {
         PluginInterface = pluginInterface;
     }

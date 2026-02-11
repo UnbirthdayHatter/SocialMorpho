@@ -1,51 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-        <AssemblyName>SocialMorpho</AssemblyName>
-        <RootNamespace>SocialMorpho</RootNamespace>
-        <Version>1.0.0.0</Version>
-        <LangVersion>latest</LangVersion>
-        <Nullable>enable</Nullable>
-        <ImplicitUsings>enable</ImplicitUsings>
-    </PropertyGroup>
 
-    <PropertyGroup>
-        <DalamudLibPath>$(appdata)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
-    </PropertyGroup>
+	<PropertyGroup>
+		<AssemblyName>SocialMorpho</AssemblyName>
+		<RootNamespace>SocialMorpho</RootNamespace>
+		<Version>1.0.0.0</Version>
+		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<PlatformTarget>x64</PlatformTarget>
+		<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+		<Platforms>x64</Platforms>
 
-    <ItemGroup>
-        <PackageReference Include="DalamudPackager" Version="2.1.10"/>
-    </ItemGroup>
+		<!-- IMPORTANT: Custom path must be inside PropertyGroup -->
+		<DalamudLibPath>C:\Users\unbir\AppData\Roaming\XIVLauncher\addon\Hooks\14.0.2.1\</DalamudLibPath>
+	</PropertyGroup>
 
-    <ItemGroup>
-        <Reference Include="Dalamud">
-            <HintPath>$(DalamudLibPath)Dalamud.dll</HintPath>
-            <Private>false</Private>
-        </Reference>
-        <Reference Include="ImGui.NET">
-            <HintPath>$(DalamudLibPath)ImGui.NET.dll</HintPath>
-            <Private>false</Private>
-        </Reference>
-        <Reference Include="Lumina">
-            <HintPath>$(DalamudLibPath)Lumina.dll</HintPath>
-            <Private>false</Private>
-        </Reference>
-        <Reference Include="Lumina.Excel">
-            <HintPath>$(DalamudLibPath)Lumina.Excel.dll</HintPath>
-            <Private>false</Private>
-        </Reference>
-    </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="DalamudPackager" Version="11.0.0" />
+	</ItemGroup>
 
-    <Target Name="ReBuildPlugin" BeforeTargets="Build">
-        <Exec Command="dotnet build -c Release"/>
-    </Target>
+	<ItemGroup>
+		<Reference Include="Dalamud.Bindings.ImGui">
+			<HintPath>$(DalamudLibPath)Dalamud.Bindings.ImGui.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
 
-    <Target Name="PackagePlugin" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
-        <DalamudPackager
-            ProjectDir="$(ProjectDir)"
-            OutputDir="$(OutputPath)"
-            AssemblyName="$(AssemblyName)"
-            MakeZip="true"
-            VersionNumbers="true"/>
-    </Target>
+		<Reference Include="Dalamud">
+			<HintPath>$(DalamudLibPath)Dalamud.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+
+		<Reference Include="Lumina">
+			<HintPath>$(DalamudLibPath)Lumina.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+
+		<Reference Include="Lumina.Excel">
+			<HintPath>$(DalamudLibPath)Lumina.Excel.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
+
+	<Target Name="PackagePlugin" AfterTargets="Build"
+        Condition="'$(Configuration)' == 'Release' And Exists('$(ProjectDir)plugin.json')">
+		<DalamudPackager
+		  ProjectDir="$(ProjectDir)"
+		  OutputDir="$(OutputPath)"
+		  AssemblyName="$(AssemblyName)"
+		  MakeZip="true"
+		  VersionNumbers="true" />
+	</Target>
+
+
 </Project>

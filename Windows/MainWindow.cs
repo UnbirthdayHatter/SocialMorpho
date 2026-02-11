@@ -1,178 +1,104 @@
-using ImGuiNET;
 using Dalamud.Interface.Windowing;
-using Dalamud.Logging;
+using Dalamud.Bindings.ImGui;
 using SocialMorpho.Data;
 using System;
 using System.Numerics;
 
 namespace SocialMorpho.Windows;
 
+
 public class MainWindow : Window, IDisposable
 {
     private Plugin Plugin;
     private QuestManager QuestManager;
-    private string NewQuestTitle = string.Empty;
-    private string NewQuestDescription = string.Empty;
-    private int NewQuestGoal = 1;
-    private int SelectedQuestType = 0;
-    private bool ShowAddQuestModal = false;
 
     public MainWindow(Plugin plugin, QuestManager questManager) : base("Social Morpho##MainWindow")
     {
         Plugin = plugin;
         QuestManager = questManager;
 
-        Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
-        Size = new Vector2(420, 600);
+        Size = new Vector2(400, 600);
         SizeCondition = ImGuiCond.FirstUseEver;
 
-        QuestManager.OnQuestsChanged += OnQuestsChanged;
     }
 
     public override void Draw()
     {
-        if (!IsOpen) return;
-
-        ImGui.SetNextWindowPos(ImGui.GetIO().DisplaySize - new Vector2(450, 20), ImGuiCond.FirstUseEver, new Vector2(1, 1));
-
-        ImGui.BeginChild("QuestPanel", new Vector2(-1, -40), true);
-
-        DrawQuests();
-
-        ImGui.EndChild();
-
-        ImGui.Spacing();
-        if (ImGui.Button("+ Add Social Quest", new Vector2(-1, 30)))
-        {
-            ShowAddQuestModal = true;
-        }
-
-        if (ShowAddQuestModal)
-        {
-            DrawAddQuestModal();
-        }
+        DrawQuestList();
+        DrawSettings();
     }
 
-    private void DrawQuests()
+    private void DrawQuestList()
     {
-        var quests = QuestManager.GetAllQuests();
+        ImGui.Text("Active Quests");
+        ImGui.Separator();
 
-        if (quests.Count == 0)
+        if (ImGui.BeginChild("##QuestListChild", new Vector2(0, 400)))
         {
-            ImGui.TextDisabled("No quests available");
-            return;
-        }
-
-        foreach (var quest in quests)
-        {
-            DrawQuestItem(quest);
-            ImGui.Spacing();
+            var quests = QuestManager.GetAllQuests();
+            foreach (var quest in quests)
+            {
+                DrawQuestItem(quest);
+            }
+            ImGui.EndChild();
         }
     }
 
     private void DrawQuestItem(QuestData quest)
     {
-        ImGui.PushID((int)quest.Id);
+        ImGui.TextWrapped($"[{quest.Id}] {quest.Title}");
+        ImGui.SameLine();
 
-        var bgColor = quest.Completed ? new Vector4(0.2f, 0.5f, 0.2f, 0.3f) : new Vector4(0.2f, 0.2f, 0.3f, 0.3f);
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, bgColor);
-        ImGui.BeginChild($"Quest_{quest.Id}", new Vector2(-1, 100), true);
+        if (ImGui.Button($"Details##details{quest.Id}"))
+        {
+        }
 
-        // Title
-        var titleColor = quest.Completed ? new Vector4(0.5f, 1, 0.5f, 1) : new Vector4(1, 0.84f, 0.3f, 1);
-        ImGui.PushStyleColor(ImGuiCol.Text, titleColor);
-        ImGui.TextWrapped(quest.Title);
-        ImGui.PopStyleColor();
+        ImGui.SameLine();
+        if (ImGui.Button($"Reset##reset{quest.Id}"))
+        {
+            QuestManager.ResetQuestProgress(quest.Id);
+        }
 
-        // Description
-        ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.7f, 0.7f, 0.7f, 1));
-        ImGui.TextWrapped(quest.Description);
-        ImGui.PopStyleColor();
+        ImGui.SameLine();
+        if (ImGui.Button($"Complete##complete{quest.Id}"))
+        {
+            QuestManager.MarkQuestComplete(quest.Id);
+        }
 
-        // Progress bar
-        float progress = quest.GoalCount > 0 ? (float)quest.CurrentCount / quest.GoalCount : 0;
-        ImGui.ProgressBar(progress, new Vector2(-1, 20), $"{quest.CurrentCount}/{quest.GoalCount}");
-
-        // Buttons
         ImGui.Spacing();
-        float buttonWidth = (ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X * 2) / 3;
-
-        if (ImGui.Button($"+##Progress_{quest.Id}", new Vector2(buttonWidth, 0)))
-        {
-            QuestManager.UpdateQuestProgress(quest.Id);
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button($"↻##Reset_{quest.Id}", new Vector2(buttonWidth, 0)))
-        {
-            QuestManager.ResetQuest(quest.Id);
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button($"✕##Delete_{quest.Id}", new Vector2(buttonWidth, 0)))
-        {
-            QuestManager.DeleteQuest(quest.Id);
-        }
-
-        ImGui.EndChild();
-        ImGui.PopStyleColor();
-        ImGui.PopID();
     }
 
-    private void DrawAddQuestModal()
+    private void DrawSettings()
     {
-        ImGui.OpenPopupOnItemClick("AddQuestPopup", ImGuiPopupFlags.MouseButtonLeft);
-        ImGui.SetNextWindowPos(ImGui.GetMainViewport().GetCenter(), ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));
+        ImGui.Separator();
+        ImGui.Text("Settings");
 
-        if (ImGui.BeginPopupModal("Add Social Quest", ref ShowAddQuestModal, ImGuiWindowFlags.AlwaysAutoResize))
+        bool soundEnabled = Plugin.Configuration.SoundEnabled;
+        bool compactMode = Plugin.Configuration.CompactMode;
+        float panelOpacity = Plugin.Configuration.PanelOpacity;
+
+        if (ImGui.Checkbox("Sound Enabled", ref soundEnabled))
         {
-            ImGui.InputText("Quest Title##NewQuestTitle", ref NewQuestTitle, 100);
-            ImGui.InputTextMultiline("Description##NewQuestDescription", ref NewQuestDescription, 200, new Vector2(300, 60));
-            ImGui.InputInt("Goal Count##NewQuestGoal", ref NewQuestGoal);
-
-            if (NewQuestGoal < 1) NewQuestGoal = 1;
-
-            ImGui.Combo("Quest Type##NewQuestType", ref SelectedQuestType, new[] { "Social", "Buff", "Emote", "Custom" }, 4);
-
-            ImGui.Spacing();
-
-            if (ImGui.Button("Create", new Vector2(100, 0)))
-            {
-                if (!string.IsNullOrWhiteSpace(NewQuestTitle))
-                {
-                    QuestManager.AddQuest(
-                        NewQuestTitle,
-                        NewQuestDescription,
-                        NewQuestGoal,
-                        (QuestType)SelectedQuestType
-                    );
-
-                    // Reset form
-                    NewQuestTitle = string.Empty;
-                    NewQuestDescription = string.Empty;
-                    NewQuestGoal = 1;
-                    SelectedQuestType = 0;
-                    ShowAddQuestModal = false;
-                }
-            }
-
-            ImGui.SameLine();
-            if (ImGui.Button("Cancel", new Vector2(100, 0)))
-            {
-                ShowAddQuestModal = false;
-            }
-
-            ImGui.EndPopup();
+            Plugin.Configuration.SoundEnabled = soundEnabled;
         }
-    }
 
-    private void OnQuestsChanged()
-    {
-        PluginLog.Information("Quests updated in Social Morpho");
+        if (ImGui.SliderFloat("Panel Opacity", ref panelOpacity, 0.0f, 1.0f))
+        {
+            Plugin.Configuration.PanelOpacity = panelOpacity;
+        }
+
+        if (ImGui.Checkbox("Compact Mode", ref compactMode))
+        {
+            Plugin.Configuration.CompactMode = compactMode;
+        }
+
+        if (ImGui.Button("Save Settings"))
+        {
+            Plugin.Configuration.Save();
+        }
     }
 
     public void Dispose()
     {
-        QuestManager.OnQuestsChanged -= OnQuestsChanged;
     }
 }
