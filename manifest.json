@@ -1,0 +1,10 @@
+{
+  "Author": "UnbirthdayHatter",
+  "Name": "SocialMorpho",
+  "InternalName": "SocialMorpho",
+  "Punchline": "A short one-line description of what the plugin does.",
+  "Description": "A longer, more detailed explanation of the plugin's functionality and features.",
+  "ApplicableVersion": "any",
+  "RepoUrl": "https://github.com/UnbirthdayHatter/SocialMorpho",
+  "IsHide": false
+}
