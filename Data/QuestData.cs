@@ -1,0 +1,25 @@
+using System;
+
+namespace SocialMorpho.Data;
+
+[Serializable]
+public class QuestData
+{
+    public ulong Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public QuestType Type { get; set; } = QuestType.Custom;
+    public int GoalCount { get; set; } = 1;
+    public int CurrentCount { get; set; } = 0;
+    public bool Completed { get; set; } = false;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? CompletedAt { get; set; }
+}
+
+public enum QuestType
+{
+    Social,
+    Buff,
+    Emote,
+    Custom
+}

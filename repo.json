@@ -1,0 +1,15 @@
+{
+  "Author": "UnbirthdayHatter",
+  "Name": "Social Morpho",
+  "Punchline": "Track social quests with your fellow adventurers",
+  "Description": "An FFXIV Dalamud plugin that adds an immersive social quest system. Create quests to track social interactions with party members, such as 'Get dotted three times' or 'Hug 4 players'. Features FFXIV-styled UI and persistent quest tracking.",
+  "InternalName": "SocialMorpho",
+  "AssemblyVersion": "1.0.0.0",
+  "TestingAssemblyVersion": "1.0.0.0",
+  "RepoUrl": "https://github.com/UnbirthdayHatter/SocialMorpho",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 9,
+  "DownloadLinkInstall": "https://github.com/UnbirthdayHatter/SocialMorpho/releases/download/v1.0.0/SocialMorpho.zip",
+  "DownloadLinkTesting": "https://github.com/UnbirthdayHatter/SocialMorpho/releases/download/latest/SocialMorpho.zip",
+  "DownloadLinkUpdate": "https://github.com/UnbirthdayHatter/SocialMorpho/releases/download/v1.0.0/SocialMorpho.zip"
+}
