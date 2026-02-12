@@ -57,26 +57,37 @@ public unsafe class NativeQuestInjector : IDisposable
             var numberArray = ToDoListNumberArray.Instance();
             if (numberArray == null) return;
 
+            // Get the current number of native quests
+            var nativeQuestCount = numberArray->IntArray[0];
+
+            // Calculate how many custom quests we can inject (max 10 total)
+            var maxQuests = 10;
+            var availableSlots = maxQuests - nativeQuestCount;
+            var questsToInject = Math.Min(activeQuests.Count, availableSlots);
+
+            if (questsToInject <= 0) return;
+
             // Free previously allocated strings
             FreeAllocatedStrings();
 
-            // Inject each active quest (max 10)
-            int questIndex = 0;
-            foreach (var quest in activeQuests)
-            {
-                if (questIndex >= 10) break; // FFXIV supports max 10 quests
+            // Starting index for custom quests (after native quests)
+            var startIndex = nativeQuestCount;
 
-                // Allocate quest title string
-                var titlePtr = AllocateString(quest.Title);
-                
-                // Allocate objective string with progress
+            // Inject each active quest
+            int injectedCount = 0;
+            for (int i = 0; i < questsToInject; i++)
+            {
+                var quest = activeQuests[i];
+                var questIndex = startIndex + i;
+
+                // Build objective string with progress
                 var objectiveText = $"{quest.Description} ({quest.CurrentCount}/{quest.GoalCount})";
-                var objectivePtr = AllocateString(objectiveText);
 
                 // Set quest icon based on type
                 int iconId = GetQuestIcon(quest.Type);
 
                 // Set quest title in string array
+                // Using managed=true so the game allocates memory
                 stringArray->SetValue(questIndex * 3, quest.Title, false, true, false);
                 
                 // Set quest objective in string array
@@ -94,16 +105,13 @@ public unsafe class NativeQuestInjector : IDisposable
                 // Set goal count
                 numberArray->IntArray[questIndex * 10 + 4] = quest.GoalCount;
 
-                questIndex++;
+                injectedCount++;
             }
 
-            // Update total quest count in the number array
-            if (questIndex > 0)
-            {
-                numberArray->IntArray[0] = questIndex;
-            }
+            // Update total quest count in the number array (native + custom)
+            numberArray->IntArray[0] = nativeQuestCount + injectedCount;
 
-            Plugin.PluginLog.Info($"Injected {questIndex} custom quests into native ToDoList");
+            Plugin.PluginLog.Info($"Injected {injectedCount} custom quests into native ToDoList (after {nativeQuestCount} native quests)");
         }
         catch (Exception ex)
         {
