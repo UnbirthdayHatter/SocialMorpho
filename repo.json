@@ -5,6 +5,7 @@
     "InternalName": "SocialMorpho",
     "AssemblyVersion": "1.2.3.0",
     "Description": "A plugin designed to enhance the social ecosystem in FFXIV.",
+    "IconUrl": "https://raw.githubusercontent.com/UnbirthdayHatter/SocialMorpho/main/Resources/quest_icon.png",
     "ApplicableVersion": "any",
     "RepoUrl": "https://github.com/UnbirthdayHatter/SocialMorpho",
     "DownloadLinkInstall": "https://github.com/UnbirthdayHatter/SocialMorpho/releases/download/latest/latest.zip",

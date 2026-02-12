@@ -15,6 +15,7 @@ public class QuestTrackerWindow : Window
     private object? CustomQuestIcon;
     private ImTextureID CustomQuestIconHandle;
     private bool HasCustomQuestIcon;
+    private bool LoggedSharedIconDrawFailure;
 
     // Soft halo tones tuned toward native quest styling.
     private readonly Vector4 FFXIVGold = new(0.70f, 0.64f, 0.45f, 0.46f);
@@ -394,8 +395,11 @@ public class QuestTrackerWindow : Window
     {
         var drawList = ImGui.GetWindowDrawList();
         var haloU32 = ImGui.ColorConvertFloat4ToU32(haloColor);
-        // Single halo layer to avoid fuzzy/double-image look.
-        drawList.AddText(textPos, haloU32, text);
+        // Single halo set (4-neighbor) for crisp glow without blur.
+        drawList.AddText(new Vector2(textPos.X + 1, textPos.Y + 0), haloU32, text);
+        drawList.AddText(new Vector2(textPos.X - 1, textPos.Y + 0), haloU32, text);
+        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y + 1), haloU32, text);
+        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y - 1), haloU32, text);
 
         ImGui.PushStyleColor(ImGuiCol.Text, this.WhiteText);
         ImGui.TextUnformatted(text);
@@ -452,6 +456,12 @@ public class QuestTrackerWindow : Window
         {
         }
 
+        if (!this.LoggedSharedIconDrawFailure)
+        {
+            this.LoggedSharedIconDrawFailure = true;
+            this.Plugin.PluginLog.Warning("Shared icon draw fallback did not find a compatible DrawIconFrom overload.");
+        }
+
         return false;
     }
 
@@ -475,7 +485,8 @@ public class QuestTrackerWindow : Window
                 if (!p[2].ParameterType.IsInstanceOfType(textureArg))
                     continue;
 
-                method.Invoke(null, new object[] { min, size, textureArg });
+                var max = new Vector2(min.X + size.X, min.Y + size.Y);
+                method.Invoke(null, new object[] { min, max, textureArg });
                 return true;
             }
         }
