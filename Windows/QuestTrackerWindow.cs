@@ -357,14 +357,14 @@ public class QuestTrackerWindow : Window
 
         var baseCursor = ImGui.GetCursorScreenPos();
         var rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X - 14f;
-        var iconWidth = this.HasCustomQuestIcon ? 20f : 12f;
+        var iconWidth = (this.HasCustomQuestIcon || this.CustomQuestIcon != null) ? 20f : 12f;
         var lineHeight = ImGui.GetTextLineHeight();
         var titleY = baseCursor.Y;
         var objectiveY = titleY + lineHeight + 2f;
         var progressY = objectiveY + lineHeight + 1f;
         var nextEntryY = progressY + lineHeight + 6f;
 
-        const float titleScale = 1.05f;
+        const float titleScale = 1.06f;
         var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - 6f, titleY, titleScale);
         this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos, titleScale);
         this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
@@ -394,15 +394,11 @@ public class QuestTrackerWindow : Window
     {
         var drawList = ImGui.GetWindowDrawList();
         var haloU32 = ImGui.ColorConvertFloat4ToU32(haloColor);
-        drawList.AddText(new Vector2(textPos.X + 1, textPos.Y + 0), haloU32, text);
-        drawList.AddText(new Vector2(textPos.X - 1, textPos.Y + 0), haloU32, text);
-        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y + 1), haloU32, text);
-        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y - 1), haloU32, text);
+        // Single halo layer to avoid fuzzy/double-image look.
+        drawList.AddText(textPos, haloU32, text);
 
         ImGui.PushStyleColor(ImGuiCol.Text, this.WhiteText);
-        ImGui.SetWindowFontScale(scale);
         ImGui.TextUnformatted(text);
-        ImGui.SetWindowFontScale(1.0f);
         ImGui.PopStyleColor();
     }
 
@@ -443,6 +439,26 @@ public class QuestTrackerWindow : Window
             if (utilType == null)
                 return false;
 
+            // Try overloads with ISharedImmediateTexture first.
+            if (TryInvokeDrawIconFrom(utilType, textureObject, min, size))
+                return true;
+
+            // Then try overloads with IDalamudTextureWrap by resolving wrap.
+            var wrapped = TryGetWrappedTexture(textureObject);
+            if (wrapped != null && TryInvokeDrawIconFrom(utilType, wrapped, min, size))
+                return true;
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
+    private static bool TryInvokeDrawIconFrom(Type utilType, object textureArg, Vector2 min, Vector2 size)
+    {
+        try
+        {
             var methods = utilType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
                 .Where(m => m.Name == "DrawIconFrom")
                 .ToArray();
@@ -456,10 +472,10 @@ public class QuestTrackerWindow : Window
                     continue;
                 }
 
-                if (!p[2].ParameterType.IsInstanceOfType(textureObject))
+                if (!p[2].ParameterType.IsInstanceOfType(textureArg))
                     continue;
 
-                method.Invoke(null, new object[] { min, size, textureObject });
+                method.Invoke(null, new object[] { min, size, textureArg });
                 return true;
             }
         }
@@ -468,6 +484,30 @@ public class QuestTrackerWindow : Window
         }
 
         return false;
+    }
+
+    private static object? TryGetWrappedTexture(object textureObject)
+    {
+        try
+        {
+            var tryGetWrap = textureObject.GetType().GetMethod("TryGetWrap", BindingFlags.Public | BindingFlags.Instance);
+            if (tryGetWrap != null)
+            {
+                var args = new object?[] { null, null };
+                var ok = tryGetWrap.Invoke(textureObject, args);
+                if (ok is bool success && success && args[0] != null)
+                    return args[0];
+            }
+
+            var getWrapOrEmpty = textureObject.GetType().GetMethod("GetWrapOrEmpty", Type.EmptyTypes);
+            if (getWrapOrEmpty != null)
+                return getWrapOrEmpty.Invoke(textureObject, Array.Empty<object>());
+        }
+        catch
+        {
+        }
+
+        return null;
     }
 
     public void Dispose()
