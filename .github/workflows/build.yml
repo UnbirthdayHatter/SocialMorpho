@@ -140,8 +140,8 @@ jobs:
           fi
           PATCH=${PATCH:-0}
 
-          LATEST_PATCH=$(git ls-remote --tags --refs origin "refs/tags/v${MAJOR}.${MINOR}.*" \
-            | awk -F'/' '{print $3}' \
+          git fetch --tags --force
+          LATEST_PATCH=$(git tag -l "v${MAJOR}.${MINOR}.*" \
             | sed -E "s/^v${MAJOR}\\.${MINOR}\\.([0-9]+)$/\\1/" \
             | awk '/^[0-9]+$/' \
             | sort -n \
