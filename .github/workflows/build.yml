@@ -139,5 +139,6 @@ jobs:
             Commit: `${{ github.sha }}`
           files: latest.zip
           draft: false
-          prerelease: true
+          prerelease: false
+
 
