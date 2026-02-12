@@ -25,8 +25,8 @@ public class QuestTrackerWindow : Window, IDisposable
         Position = new Vector2(ImGui.GetIO().DisplaySize.X - 350, 50);
         PositionCondition = ImGuiCond.FirstUseEver;
 
-        // Semi-transparent background
-        BgAlpha = 0.7f;
+        // Semi-transparent background with FFXIV-style tint
+        BgAlpha = 0.75f;
 
         // Show by default if configured
         IsOpen = Plugin.Configuration.ShowQuestTracker;
@@ -48,49 +48,84 @@ public class QuestTrackerWindow : Window, IDisposable
             return;
         }
 
-        ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(1.0f, 0.95f, 0.7f, 1.0f));
+        // FFXIV-style header with golden color
+        ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.83f, 0.69f, 0.22f, 1.0f));
         ImGui.Text("Active Quests");
         ImGui.PopStyleColor();
         
         ImGui.Separator();
         ImGui.Spacing();
+        ImGui.Spacing(); // Extra spacing for FFXIV style
 
         foreach (var quest in activeQuests)
         {
             DrawQuestEntry(quest);
+            ImGui.Spacing();
+            ImGui.Spacing(); // Extra spacing between quest entries
         }
     }
 
     private void DrawQuestEntry(QuestData quest)
     {
-        // Quest title with type color
-        var titleColor = GetQuestTypeColor(quest.Type);
+        // Quest type indicator (colored symbol)
+        var typeSymbol = GetQuestTypeSymbol(quest.Type);
+        var typeColor = GetQuestTypeIndicatorColor(quest.Type);
+        ImGui.PushStyleColor(ImGuiCol.Text, typeColor);
+        ImGui.Text(typeSymbol);
+        ImGui.PopStyleColor();
+        
+        ImGui.SameLine();
+        
+        // Quest title with FFXIV golden color
+        var titleColor = new Vector4(0.83f, 0.69f, 0.22f, 1.0f); // FFXIV quest gold
         ImGui.PushStyleColor(ImGuiCol.Text, titleColor);
         ImGui.TextWrapped(quest.Title);
         ImGui.PopStyleColor();
 
-        // Progress display
+        // Objective/Description text with arrow and cyan color (indented)
+        ImGui.Indent(20f);
+        var objectiveColor = new Vector4(0.0f, 0.81f, 0.82f, 1.0f); // FFXIV objective cyan
+        ImGui.PushStyleColor(ImGuiCol.Text, objectiveColor);
+        
+        // Arrow symbol before objective
+        ImGui.Text("► " + quest.Description);
+        
+        // Progress counter in cyan
         ImGui.SameLine();
-        ImGui.Text($"({quest.CurrentCount}/{quest.GoalCount})");
+        ImGui.Text($" ({quest.CurrentCount}/{quest.GoalCount})");
+        ImGui.PopStyleColor();
+        ImGui.Unindent(20f);
 
-        // Progress bar
+        // Progress bar (subtle, matching FFXIV style)
         float progress = quest.GoalCount > 0 ? (float)quest.CurrentCount / quest.GoalCount : 0f;
         var progressColor = GetProgressColor(progress);
+        ImGui.Indent(20f);
         ImGui.PushStyleColor(ImGuiCol.PlotHistogram, progressColor);
-        ImGui.ProgressBar(progress, new Vector2(280, 4), string.Empty);
+        ImGui.ProgressBar(progress, new Vector2(260, 3), string.Empty);
         ImGui.PopStyleColor();
-
-        ImGui.Spacing();
+        ImGui.Unindent(20f);
     }
 
-    private Vector4 GetQuestTypeColor(QuestType type)
+    private string GetQuestTypeSymbol(QuestType type)
+    {
+        return type switch
+        {
+            QuestType.Social => "●",    // Circle for social
+            QuestType.Buff => "◆",      // Diamond for buff
+            QuestType.Emote => "■",     // Square for emote
+            QuestType.Custom => "★",    // Star for custom
+            _ => "●"
+        };
+    }
+
+    private Vector4 GetQuestTypeIndicatorColor(QuestType type)
     {
         return type switch
         {
             QuestType.Social => new Vector4(0.4f, 0.8f, 1.0f, 1.0f),    // Light blue
             QuestType.Buff => new Vector4(0.8f, 1.0f, 0.4f, 1.0f),      // Light green
             QuestType.Emote => new Vector4(1.0f, 0.8f, 0.4f, 1.0f),     // Light orange
-            QuestType.Custom => new Vector4(0.9f, 0.9f, 0.9f, 1.0f),    // White
+            QuestType.Custom => new Vector4(0.83f, 0.69f, 0.22f, 1.0f), // Gold
             _ => new Vector4(1.0f, 1.0f, 1.0f, 1.0f)
         };
     }
@@ -98,11 +133,11 @@ public class QuestTrackerWindow : Window, IDisposable
     private Vector4 GetProgressColor(float progress)
     {
         if (progress >= 1.0f)
-            return new Vector4(0.2f, 0.8f, 0.2f, 1.0f);  // Green - complete
+            return new Vector4(0.3f, 0.9f, 0.3f, 1.0f);  // Bright green - complete
         else if (progress > 0f)
-            return new Vector4(0.8f, 0.8f, 0.2f, 1.0f);  // Yellow - in progress
+            return new Vector4(0.0f, 0.81f, 0.82f, 0.8f);  // Cyan - in progress (FFXIV style)
         else
-            return new Vector4(0.5f, 0.5f, 0.5f, 1.0f);  // Gray - not started
+            return new Vector4(0.4f, 0.4f, 0.4f, 0.6f);  // Darker gray - not started
     }
 
     public void Dispose()
