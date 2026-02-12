@@ -26,7 +26,7 @@ An immersive social quest system for FFXIV that allows you to track social inter
 
 🔄 **Quest Reset Schedules** - Daily and Weekly automatic quest resets
 
-📋 **Quest Tracker Overlay** - FFXIV-style quest tracker that shows active quests on-screen
+📋 **Quest Tracker Overlay** - ImGui overlay window styled like FFXIV's quest tracker that shows active quests on-screen
 
 📦 **JSON Quest Loading** - Load custom quests from external JSON files
 
@@ -113,15 +113,16 @@ Each quest has the following actions:
 
 ## Quest Tracker Overlay
 
+**Implementation Note:** The quest tracker is an **ImGui overlay window**, not injected into FFXIV's native quest system. This provides a safer, more maintainable solution that appears alongside FFXIV's UI without modifying game memory.
 
-
-The quest tracker overlay displays active quests on the right side of your screen, similar to FFXIV's native quest tracker. Features include:
+The quest tracker overlay displays active quests on the right side of your screen, styled to match FFXIV's native quest tracker. Features include:
 
 - Shows only incomplete quests
 - Displays quest title and progress (e.g., "3/5")
 - Color-coded progress bars (Green=Complete, Yellow=In Progress, Gray=Not Started)
 - Semi-transparent background that blends with the game UI
 - Can be toggled on/off in settings
+- Separate window that appears on top of the game (standard Dalamud plugin approach)
 
 ### Configuration
 
@@ -227,6 +228,32 @@ Built with:
 - C# / .NET 10.0
 - Dalamud Plugin Framework
 - ImGui for UI rendering
+
+
+
+## Technical Notes
+
+### Quest Tracker Implementation
+
+**Q: Is the quest tracker injected into FFXIV's native quest system?**
+
+**A: No.** The quest tracker is implemented as an **ImGui overlay window** that renders on top of the game, not injected into FFXIV's native quest UI.
+
+**Why an overlay instead of native injection?**
+
+1. **Safety**: No game memory manipulation - eliminates risk of crashes or bans
+2. **Maintainability**: Standard Dalamud plugin approach, easier to debug and update
+3. **Compatibility**: Works across game updates without reverse engineering internal structures
+4. **Stability**: Isolated from game code changes
+
+**How it works:**
+- Uses ImGui (Dear ImGui) to render a separate window
+- Styled to visually match FFXIV's quest tracker aesthetic
+- Positioned in the top-right corner by default
+- Semi-transparent background blends with game UI
+- Completely separate from FFXIV's native quest system
+
+The `NativeQuestInjector.cs` file in the codebase is a stub kept for potential future implementation, but the current working implementation is `QuestTrackerWindow.cs` (ImGui overlay).
 
 
 
