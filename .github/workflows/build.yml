@@ -75,6 +75,31 @@ jobs:
           Compress-Archive -Path "$releaseDir/*" -DestinationPath "latest.zip" -Force
           Get-ChildItem latest.zip | Format-List Name,Length
 
+      - name: Validate latest.zip contents
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zipPath = (Resolve-Path "latest.zip").Path
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+          try {
+            $entries = @($zip.Entries | ForEach-Object { $_.FullName })
+            $required = @("SocialMorpho.dll", "SocialMorpho.json")
+
+            foreach ($file in $required) {
+              if ($entries -notcontains $file) {
+                Write-Error "Invalid latest.zip: missing root entry '$file'. Entries: $($entries -join ', ')"
+                exit 1
+              }
+            }
+
+            if ($entries -contains "latest.zip") {
+              Write-Error "Invalid latest.zip: found nested latest.zip entry."
+              exit 1
+            }
+          } finally {
+            $zip.Dispose()
+          }
+
       - name: Upload latest.zip artifact
         uses: actions/upload-artifact@v4
         with:
@@ -95,6 +120,17 @@ jobs:
         with:
           name: latest-zip
           path: .
+
+      - name: Validate downloaded latest.zip
+        shell: bash
+        run: |
+          unzip -l latest.zip
+          unzip -l latest.zip | grep -q " SocialMorpho.dll$"
+          unzip -l latest.zip | grep -q " SocialMorpho.json$"
+          if unzip -l latest.zip | grep -q " latest.zip$"; then
+            echo "Invalid latest.zip: nested latest.zip found"
+            exit 1
+          fi
 
       - name: Publish or update latest release
         uses: softprops/action-gh-release@v2
