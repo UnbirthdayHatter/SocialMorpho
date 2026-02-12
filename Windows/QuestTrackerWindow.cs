@@ -17,10 +17,6 @@ public class QuestTrackerWindow : Window
     // FFXIV color scheme
     private readonly Vector4 FFXIVGold = new(0.83f, 0.69f, 0.22f, 1.0f);      // #D4AF37
     private readonly Vector4 FFXIVCyan = new(0.0f, 0.81f, 0.82f, 1.0f);       // #00CED1
-    private readonly Vector4 SocialColor = new(0.4f, 0.8f, 1.0f, 1.0f);       // Light Blue
-    private readonly Vector4 BuffColor = new(0.8f, 1.0f, 0.4f, 1.0f);         // Light Green
-    private readonly Vector4 EmoteColor = new(1.0f, 0.8f, 0.4f, 1.0f);        // Light Orange
-    private readonly Vector4 CustomColor = new(0.83f, 0.69f, 0.22f, 1.0f);    // FFXIV Gold
 
     // Progress bar colors
     private readonly Vector4 ProgressComplete = new(0.3f, 0.9f, 0.3f, 1.0f);  // Bright Green
@@ -50,8 +46,15 @@ public class QuestTrackerWindow : Window
         try
         {
             // Try loading from file system first
+            var assemblyDir = Plugin.PluginInterface.AssemblyLocation.DirectoryName;
+            if (string.IsNullOrEmpty(assemblyDir))
+            {
+                Plugin.PluginLog.Warning("Assembly directory path is null or empty, cannot load custom quest icon");
+                return;
+            }
+
             var iconPath = Path.Combine(
-                Plugin.PluginInterface.AssemblyLocation.DirectoryName!,
+                assemblyDir,
                 "Resources",
                 "quest_icon.png"
             );
@@ -199,30 +202,6 @@ public class QuestTrackerWindow : Window
             ImGui.TextColored(new Vector4(1.0f, 0.84f, 0.0f, 1.0f), "❗");
             ImGui.SameLine();
         }
-    }
-
-    private string GetQuestTypeSymbol(QuestType type)
-    {
-        return type switch
-        {
-            QuestType.Social => "●",   // Circle
-            QuestType.Buff => "◆",     // Diamond
-            QuestType.Emote => "■",    // Square
-            QuestType.Custom => "★",   // Star
-            _ => "●"
-        };
-    }
-
-    private Vector4 GetQuestTypeColor(QuestType type)
-    {
-        return type switch
-        {
-            QuestType.Social => SocialColor,
-            QuestType.Buff => BuffColor,
-            QuestType.Emote => EmoteColor,
-            QuestType.Custom => CustomColor,
-            _ => FFXIVGold
-        };
     }
 
     private Vector4 GetProgressBarColor(float progress)
