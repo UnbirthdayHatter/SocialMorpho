@@ -114,6 +114,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download latest.zip artifact
         uses: actions/download-artifact@v4
@@ -121,12 +123,34 @@ jobs:
           name: latest-zip
           path: .
 
-      - name: Extract plugin version
+      - name: Compute next auto version
         id: version
         shell: bash
         run: |
-          VERSION=$(grep -oP '<Version>\K[^<]+' SocialMorpho.csproj)
+          BASE_VERSION=$(grep -oP '<Version>\K[^<]+' SocialMorpho.csproj)
+          IFS='.' read -r MAJOR MINOR PATCH EXTRA <<< "$BASE_VERSION"
+          if [ -z "$MAJOR" ] || [ -z "$MINOR" ]; then
+            echo "Invalid <Version> in SocialMorpho.csproj: $BASE_VERSION"
+            exit 1
+          fi
+          PATCH=${PATCH:-0}
+
+          LATEST_PATCH=$(git ls-remote --tags --refs origin "refs/tags/v${MAJOR}.${MINOR}.*" \
+            | awk -F'/' '{print $3}' \
+            | sed -E "s/^v${MAJOR}\\.${MINOR}\\.([0-9]+)$/\\1/" \
+            | awk '/^[0-9]+$/' \
+            | sort -n \
+            | tail -n1)
+
+          if [ -z "$LATEST_PATCH" ]; then
+            NEXT_PATCH=$PATCH
+          else
+            NEXT_PATCH=$((LATEST_PATCH + 1))
+          fi
+
+          VERSION="${MAJOR}.${MINOR}.${NEXT_PATCH}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Auto version: ${VERSION}"
           cp latest.zip "SocialMorpho-v${VERSION}.zip"
 
       - name: Validate downloaded latest.zip
