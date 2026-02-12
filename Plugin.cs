@@ -19,7 +19,7 @@ public sealed class Plugin : IDalamudPlugin
     private ICommandManager CommandManager { get; init; }
     private IClientState ClientState { get; init; }
     private IChatGui ChatGui { get; init; }
-    private IPluginLog PluginLog { get; init; }
+    public IPluginLog PluginLog { get; init; }
     
     public Configuration Configuration { get; init; }
     public WindowSystem WindowSystem = new("SocialMorpho");
