@@ -1,0 +1,24 @@
+{
+  "quests": [
+    {
+      "id": 1001,
+      "title": "Weekly Social Gathering",
+      "description": "Attend 3 social events with FC members",
+      "type": "Social",
+      "goalCount": 3,
+      "resetSchedule": "Weekly",
+      "currentCount": 0,
+      "completed": false
+    },
+    {
+      "id": 1002,
+      "title": "Daily Buff Share",
+      "description": "Share buffs with 5 different players",
+      "type": "Buff",
+      "goalCount": 5,
+      "resetSchedule": "Daily",
+      "currentCount": 0,
+      "completed": false
+    }
+  ]
+}

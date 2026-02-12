@@ -18,6 +18,11 @@ public class Configuration : IPluginConfiguration
     // Quest data
     public List<QuestData> SavedQuests { get; set; } = new();
 
+    // Quest Tracker settings
+    public bool ShowQuestTracker { get; set; } = true;
+    public bool ShowQuestTrackerOnLogin { get; set; } = true;
+    public bool ShowLoginNotification { get; set; } = true;
+
     [NonSerialized]
     private IDalamudPluginInterface? PluginInterface;
 
