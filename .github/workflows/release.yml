@@ -1,0 +1,109 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      
+      - name: Download Dalamud
+        run: |
+          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile latest.zip
+          Expand-Archive -Force latest.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
+      
+      - name: Restore dependencies
+        run: dotnet restore
+      
+      - name: Build Release
+        run: dotnet build -c Release --no-restore
+      
+      - name: Get version from tag
+        id: get_version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "Version: $version"
+      
+      - name: Create release package
+        shell: pwsh
+        run: |
+          $outputDir = "bin/Release/net8.0-windows"
+          $releaseDir = "release"
+          New-Item -ItemType Directory -Force -Path $releaseDir
+          
+          # Copy plugin files
+          Copy-Item "$outputDir/SocialMorpho.dll" -Destination $releaseDir
+          Copy-Item "SocialMorpho.json" -Destination $releaseDir
+          Copy-Item "manifest.json" -Destination $releaseDir -ErrorAction SilentlyContinue
+          
+          # Copy Quests.json if it exists
+          if (Test-Path "$outputDir/Quests.json") {
+            Copy-Item "$outputDir/Quests.json" -Destination $releaseDir
+          }
+          
+          # Create latest.zip
+          Compress-Archive -Path "$releaseDir/*" -DestinationPath "latest.zip" -Force
+          
+          # Verify contents
+          Write-Host "Contents of latest.zip:"
+          Get-ChildItem $releaseDir
+      
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Social Morpho ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            # Social Morpho v${{ steps.get_version.outputs.VERSION }}
+            
+            ## Installation
+            
+            ### Via Custom Repository (Recommended)
+            1. Open XIVLauncher
+            2. Go to Settings → Experimental → Custom Plugin Repositories
+            3. Add: `https://raw.githubusercontent.com/UnbirthdayHatter/SocialMorpho/main/repo.json`
+            4. Save and go to Plugin Installer
+            5. Search for "Social Morpho" and install
+            
+            ### Manual Installation
+            1. Download `latest.zip` below
+            2. Extract to `%AppData%\XIVLauncher\devPlugins\SocialMorpho\`
+            3. Enable in Plugin Installer
+            
+            ## What's New
+            
+            See [CHANGELOG.md](https://github.com/UnbirthdayHatter/SocialMorpho/blob/main/CHANGELOG.md) for details.
+            
+            ## Support
+            
+            - Report issues: https://github.com/UnbirthdayHatter/SocialMorpho/issues
+            - Repository: https://github.com/UnbirthdayHatter/SocialMorpho
+          files: |
+            latest.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SocialMorpho-${{ steps.get_version.outputs.VERSION }}
+          path: release/*
