@@ -175,8 +175,13 @@ public class MainWindow : Window, IDisposable
         ImGui.Text("Add New Quest");
         ImGui.Separator();
 
-        ImGui.InputScalar("Quest ID", ImGuiDataType.U64, ref newQuestId);
-        ImGui.InputText("Title", ref newQuestTitle, 100);
+        var questIdString = newQuestId.ToString();
+if (ImGui.InputText("Quest ID", ref questIdString, 20))
+{
+    if (ulong.TryParse(questIdString, out var parsed))
+        newQuestId = parsed;
+}
+ImGui.InputText("Title", ref newQuestTitle, 100);
         ImGui.InputTextMultiline("Description", ref newQuestDescription, 500, new Vector2(-1, 60));
         
         if (ImGui.BeginCombo("Type", newQuestType.ToString()))
