@@ -32,14 +32,93 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
 
+        // Initialize default quests if empty
+        if (Configuration.SavedQuests.Count == 0)
+        {
+            InitializeDefaultQuests();
+        }
+
         QuestManager = new QuestManager(Configuration);
         MainWindow = new MainWindow(this, QuestManager);
 
         WindowSystem.AddWindow(MainWindow);
+
+        // Register commands
+        CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Open Social Morpho quest menu"
+        });
+        CommandManager.AddHandler(CommandNameAlt, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Open Social Morpho quest menu"
+        });
+
+        // Subscribe to draw event
+        PluginInterface.UiBuilder.Draw += DrawUI;
+        PluginInterface.UiBuilder.OpenConfigUi += DrawConfigUI;
+    }
+
+    private void InitializeDefaultQuests()
+    {
+        Configuration.SavedQuests.Add(new QuestData
+        {
+            Id = 1,
+            Title = "Get Dotted Three Times",
+            Description = "Receive DoT effects from 3 different players",
+            Type = QuestType.Social,
+            GoalCount = 3,
+            CurrentCount = 0,
+            Completed = false
+        });
+
+        Configuration.SavedQuests.Add(new QuestData
+        {
+            Id = 2,
+            Title = "Hug Four Players",
+            Description = "Use the hug emote on 4 different players",
+            Type = QuestType.Emote,
+            GoalCount = 4,
+            CurrentCount = 0,
+            Completed = false
+        });
+
+        Configuration.SavedQuests.Add(new QuestData
+        {
+            Id = 3,
+            Title = "Social Butterfly",
+            Description = "Use 5 social actions with different players",
+            Type = QuestType.Social,
+            GoalCount = 5,
+            CurrentCount = 0,
+            Completed = false
+        });
+
+        Configuration.Save();
+    }
+
+    private void DrawUI()
+    {
+        WindowSystem.Draw();
+    }
+
+    private void DrawConfigUI()
+    {
+        MainWindow.IsOpen = true;
+    }
+
+    private void OnCommand(string command, string args)
+    {
+        MainWindow.Toggle();
     }
 
     public void Dispose()
     {
         WindowSystem.RemoveAllWindows();
+
+        CommandManager.RemoveHandler(CommandName);
+        CommandManager.RemoveHandler(CommandNameAlt);
+
+        PluginInterface.UiBuilder.Draw -= DrawUI;
+        PluginInterface.UiBuilder.OpenConfigUi -= DrawConfigUI;
     }
 }
