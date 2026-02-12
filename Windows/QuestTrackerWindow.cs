@@ -1,10 +1,11 @@
-using Dalamud.Interface.Windowing;
-using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.Internal;
-using SocialMorpho.Data;
+using System;
 using System.IO;
 using System.Numerics;
-using System.Linq;
+using Dalamud.Interface.Windowing;
+using Dalamud.Interface.Internal;
+using Dalamud.Plugin.Services;
+using ImGuiNET;
+using SocialMorpho.Data;
 
 namespace SocialMorpho.Windows;
 
@@ -12,6 +13,7 @@ public class QuestTrackerWindow : Window
 {
     private Plugin Plugin;
     private QuestManager QuestManager;
+    private readonly ITextureProvider TextureProvider;
     private IDalamudTextureWrap? CustomQuestIcon;
 
     // FFXIV color scheme
@@ -23,7 +25,7 @@ public class QuestTrackerWindow : Window
     private readonly Vector4 ProgressActive = new(0.0f, 0.81f, 0.82f, 0.8f);  // FFXIV Cyan
     private readonly Vector4 ProgressInactive = new(0.4f, 0.4f, 0.4f, 0.6f);  // Dark Gray
 
-    public QuestTrackerWindow(Plugin plugin, QuestManager questManager) 
+    public QuestTrackerWindow(Plugin plugin, QuestManager questManager, ITextureProvider textureProvider) 
         : base("Quest Tracker##SocialMorphoTracker", 
                ImGuiWindowFlags.NoTitleBar | 
                ImGuiWindowFlags.NoResize | 
@@ -32,6 +34,7 @@ public class QuestTrackerWindow : Window
     {
         Plugin = plugin;
         QuestManager = questManager;
+        TextureProvider = textureProvider;
         LoadCustomIcon();
 
         // Position will be set in PreDraw to ensure accurate screen size
@@ -45,24 +48,21 @@ public class QuestTrackerWindow : Window
     {
         try
         {
-            // Try loading from file system first
-            var assemblyDir = Plugin.PluginInterface.AssemblyLocation.DirectoryName;
-            if (string.IsNullOrEmpty(assemblyDir))
-            {
-                Plugin.PluginLog.Warning("Assembly directory path is null or empty, cannot load custom quest icon");
-                return;
-            }
-
             var iconPath = Path.Combine(
-                assemblyDir,
+                Plugin.PluginInterface.AssemblyLocation.DirectoryName!,
                 "Resources",
                 "quest_icon.png"
             );
 
             if (File.Exists(iconPath))
             {
-                CustomQuestIcon = Plugin.PluginInterface.UiBuilder.LoadImage(iconPath);
-                Plugin.PluginLog.Info($"Custom quest icon loaded from: {iconPath}");
+                var file = new FileInfo(iconPath);
+                CustomQuestIcon = TextureProvider.GetFromFile(file).RentAsync().Result;
+                
+                if (CustomQuestIcon != null)
+                {
+                    Plugin.PluginLog.Info($"Custom quest icon loaded from: {iconPath}");
+                }
             }
             else
             {
@@ -166,7 +166,7 @@ public class QuestTrackerWindow : Window
 
     private void DrawCustomIcon()
     {
-        if (CustomQuestIcon != null)
+        if (CustomQuestIcon != null && CustomQuestIcon.ImGuiHandle != IntPtr.Zero)
         {
             var pos = ImGui.GetCursorScreenPos();
             var drawList = ImGui.GetWindowDrawList();
@@ -194,7 +194,7 @@ public class QuestTrackerWindow : Window
             // Shadow
             drawList.AddText(
                 new Vector2(pos.X + 1, pos.Y + 1),
-                ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.5f)),
+                ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.8f)),
                 "❗"
             );
             

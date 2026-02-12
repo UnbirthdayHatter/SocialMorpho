@@ -21,6 +21,9 @@ public sealed class Plugin : IDalamudPlugin
     private IChatGui ChatGui { get; init; }
     public IPluginLog PluginLog { get; init; }
     
+    [PluginService]
+    internal static ITextureProvider TextureProvider { get; private set; } = null!
+    
     public Configuration Configuration { get; init; }
     public WindowSystem WindowSystem = new("SocialMorpho");
 
@@ -71,7 +74,7 @@ public sealed class Plugin : IDalamudPlugin
         QuestNotificationService = new QuestNotificationService(this, ClientState, ChatGui, PluginLog);
 
         MainWindow = new MainWindow(this, QuestManager);
-        QuestTrackerWindow = new QuestTrackerWindow(this, QuestManager);
+        QuestTrackerWindow = new QuestTrackerWindow(this, QuestManager, TextureProvider);
         QuestInjector = new NativeQuestInjector(this, QuestManager);
 
         WindowSystem.AddWindow(MainWindow);
