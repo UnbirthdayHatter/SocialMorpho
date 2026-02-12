@@ -21,12 +21,21 @@ jobs:
       with:
         dotnet-version: '10.0.x'
       
-                   
+    - name: Download Dalamud
+      run: |
+        New-Item -ItemType Directory -Force -Path .\dalamud
+        Invoke-WebRequest -Uri https://github.com/goatcorp/dalamud-distrib/raw/main/latest.zip -OutFile .\dalamud.zip
+        Expand-Archive -Path .\dalamud.zip -DestinationPath .\dalamud -Force
+        
     - name: Restore dependencies
       run: dotnet restore
+      env:
+        DalamudLibPath: ${{ github.workspace }}\dalamud\
     
     - name: Build Release
       run: dotnet build -c Release --no-restore
+      env:
+        DalamudLibPath: ${{ github.workspace }}\dalamud\
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
