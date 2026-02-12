@@ -3,6 +3,7 @@ using Dalamud.Interface.Textures;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Windowing;
 using SocialMorpho.Data;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
@@ -21,11 +22,18 @@ public class QuestOfferWindow : Window, IDisposable
     private Action<QuestOfferDefinition>? onDecline;
 
     public QuestOfferWindow(Plugin plugin)
-        : base("New Quest Offer##SocialMorphoOffer", ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse)
+        : base("New Quest Offer##SocialMorphoOffer",
+            ImGuiWindowFlags.NoTitleBar |
+            ImGuiWindowFlags.NoResize |
+            ImGuiWindowFlags.NoCollapse |
+            ImGuiWindowFlags.NoScrollbar |
+            ImGuiWindowFlags.NoScrollWithMouse |
+            ImGuiWindowFlags.NoBackground)
     {
         this.plugin = plugin;
         this.Size = new Vector2(760, 760);
         this.SizeCondition = ImGuiCond.FirstUseEver;
+        this.BgAlpha = 0.0f;
         this.IsOpen = false;
     }
 
@@ -78,9 +86,9 @@ public class QuestOfferWindow : Window, IDisposable
         // Draw the content image in the transparent top slot of the frame.
         if (this.offerImage != null)
         {
-            var contentStart = frameStart + new Vector2(frameSize.X * 0.132f, frameSize.Y * 0.306f);
-            var contentEnd = frameStart + new Vector2(frameSize.X * 0.867f, frameSize.Y * 0.538f);
-            this.TryDrawTexture(this.offerImage, contentStart, contentEnd);
+            var contentStart = frameStart + new Vector2(frameSize.X * 0.103f, frameSize.Y * 0.294f);
+            var contentEnd = frameStart + new Vector2(frameSize.X * 0.897f, frameSize.Y * 0.541f);
+            this.TryDrawTextureFit(this.offerImage, contentStart, contentEnd);
         }
 
         // Overlay title, text and buttons aligned to the frame's designed content areas.
@@ -88,25 +96,39 @@ public class QuestOfferWindow : Window, IDisposable
         var titleSize = ImGui.CalcTextSize(titleText);
         var titleX = frameStart.X + ((frameSize.X - titleSize.X) * 0.5f);
         var titleY = frameStart.Y + (frameSize.Y * 0.175f);
-        drawList.AddText(new Vector2(titleX, titleY), ImGui.GetColorU32(new Vector4(0.15f, 0.15f, 0.15f, 1f)), titleText);
+        var blackText = ImGui.GetColorU32(new Vector4(0.10f, 0.10f, 0.10f, 1f));
+        drawList.AddText(new Vector2(titleX, titleY), blackText, titleText);
 
-        var textLeft = frameStart.X + (frameSize.X * 0.12f);
-        var textTop = frameStart.Y + (frameSize.Y * 0.56f);
-        var textWidth = frameSize.X * 0.76f;
+        var textLeft = frameStart.X + (frameSize.X * 0.13f);
+        var textTop = frameStart.Y + (frameSize.Y * 0.61f);
+        var textWidth = frameSize.X * 0.74f;
+        var textBottom = frameStart.Y + (frameSize.Y * 0.86f);
+        var textLineHeight = ImGui.GetTextLineHeightWithSpacing();
+        var descriptionTitle = "Description";
+        drawList.AddText(new Vector2(textLeft, textTop - textLineHeight), blackText, descriptionTitle);
 
-        ImGui.SetCursorScreenPos(new Vector2(textLeft, textTop));
-        ImGui.PushTextWrapPos(textLeft + textWidth);
-        ImGui.TextWrapped(this.currentOffer?.PopupDescription ?? string.Empty);
-        ImGui.PopTextWrapPos();
+        var lines = this.WrapTextToWidth(this.currentOffer?.PopupDescription ?? string.Empty, textWidth);
+        var y = textTop;
+        foreach (var line in lines)
+        {
+            if ((y + textLineHeight) > textBottom)
+            {
+                break;
+            }
+
+            drawList.AddText(new Vector2(textLeft, y), blackText, line);
+            y += textLineHeight;
+        }
 
         var buttonY = frameStart.Y + (frameSize.Y * 0.90f);
         var buttonWidth = frameSize.X * 0.27f;
+        var buttonHeight = frameSize.Y * 0.055f;
         var buttonGap = frameSize.X * 0.12f;
         var leftButtonX = frameStart.X + (frameSize.X * 0.17f);
         var rightButtonX = leftButtonX + buttonWidth + buttonGap;
 
         ImGui.SetCursorScreenPos(new Vector2(leftButtonX, buttonY));
-        if (ImGui.Button("Accept", new Vector2(buttonWidth, 0f)))
+        if (ImGui.InvisibleButton("##accept_offer", new Vector2(buttonWidth, buttonHeight)))
         {
             this.onAccept?.Invoke(this.currentOffer!);
             this.CloseOffer();
@@ -114,7 +136,7 @@ public class QuestOfferWindow : Window, IDisposable
         }
 
         ImGui.SetCursorScreenPos(new Vector2(rightButtonX, buttonY));
-        if (ImGui.Button("Decline", new Vector2(buttonWidth, 0f)))
+        if (ImGui.InvisibleButton("##decline_offer", new Vector2(buttonWidth, buttonHeight)))
         {
             this.onDecline?.Invoke(this.currentOffer!);
             this.CloseOffer();
@@ -197,6 +219,118 @@ public class QuestOfferWindow : Window, IDisposable
         }
 
         return false;
+    }
+
+    private void TryDrawTextureFit(ISharedImmediateTexture texture, Vector2 topLeft, Vector2 bottomRight)
+    {
+        var regionSize = bottomRight - topLeft;
+        if (regionSize.X <= 0f || regionSize.Y <= 0f)
+        {
+            return;
+        }
+
+        if (!TryGetTextureSize(texture, out var textureSize) || textureSize.X <= 0f || textureSize.Y <= 0f)
+        {
+            this.TryDrawTexture(texture, topLeft, bottomRight);
+            return;
+        }
+
+        var texAspect = textureSize.X / textureSize.Y;
+        var regionAspect = regionSize.X / regionSize.Y;
+
+        Vector2 drawSize;
+        if (texAspect > regionAspect)
+        {
+            drawSize = new Vector2(regionSize.X, regionSize.X / texAspect);
+        }
+        else
+        {
+            drawSize = new Vector2(regionSize.Y * texAspect, regionSize.Y);
+        }
+
+        var offset = new Vector2((regionSize.X - drawSize.X) * 0.5f, (regionSize.Y - drawSize.Y) * 0.5f);
+        var drawStart = topLeft + offset;
+        var drawEnd = drawStart + drawSize;
+        this.TryDrawTexture(texture, drawStart, drawEnd);
+    }
+
+    private static bool TryGetTextureSize(ISharedImmediateTexture texture, out Vector2 size)
+    {
+        size = Vector2.Zero;
+        if (!texture.TryGetWrap(out var wrap, out _) || wrap == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var wrapType = wrap.GetType();
+            var widthProp = wrapType.GetProperty("Width");
+            var heightProp = wrapType.GetProperty("Height");
+            if (widthProp == null || heightProp == null)
+            {
+                return false;
+            }
+
+            var w = widthProp.GetValue(wrap);
+            var h = heightProp.GetValue(wrap);
+            if (w == null || h == null)
+            {
+                return false;
+            }
+
+            var width = Convert.ToSingle(w);
+            var height = Convert.ToSingle(h);
+            if (width <= 0f || height <= 0f)
+            {
+                return false;
+            }
+
+            size = new Vector2(width, height);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private List<string> WrapTextToWidth(string text, float maxWidth)
+    {
+        var result = new List<string>();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return result;
+        }
+
+        foreach (var paragraph in text.Replace("\r", string.Empty).Split('\n'))
+        {
+            var words = paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length == 0)
+            {
+                result.Add(string.Empty);
+                continue;
+            }
+
+            var current = words[0];
+            for (var i = 1; i < words.Length; i++)
+            {
+                var candidate = $"{current} {words[i]}";
+                if (ImGui.CalcTextSize(candidate).X <= maxWidth)
+                {
+                    current = candidate;
+                }
+                else
+                {
+                    result.Add(current);
+                    current = words[i];
+                }
+            }
+
+            result.Add(current);
+        }
+
+        return result;
     }
 
     private static bool TryGetImGuiTextureFromWrap(IDalamudTextureWrap wrap, out ImTextureID textureId)
