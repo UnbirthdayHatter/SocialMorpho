@@ -20,12 +20,27 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
       
-      - name: Download Dalamud
+      - name: Download Dalamud 14.0.2.1
+        shell: pwsh
         run: |
-          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile latest.zip
-          Expand-Archive -Force latest.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
+          $dalamudPath = "$env:AppData\XIVLauncher\addon\Hooks\dev"
+          New-Item -ItemType Directory -Force -Path $dalamudPath
+          
+          $url = "https://goatcorp.github.io/dalamud-distrib/stg/latest.zip"
+          Invoke-WebRequest -Uri $url -OutFile "dalamud.zip"
+          Expand-Archive -Force "dalamud.zip" $dalamudPath
+          
+          $dalamudDll = Join-Path $dalamudPath "Dalamud.dll"
+          if (Test-Path $dalamudDll) {
+            Write-Host "✅ Dalamud.dll found"
+            $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($dalamudDll)
+            Write-Host "Dalamud Version: $($version.FileVersion)"
+          } else {
+            Write-Error "❌ Dalamud.dll not found!"
+            exit 1
+          }
       
       - name: Restore dependencies
         run: dotnet restore
@@ -44,7 +59,7 @@ jobs:
       - name: Create release package
         shell: pwsh
         run: |
-          $outputDir = "bin/Release/net8.0-windows"
+          $outputDir = "bin/Release/net10.0-windows"
           $releaseDir = "release"
           New-Item -ItemType Directory -Force -Path $releaseDir
           
@@ -78,6 +93,8 @@ jobs:
           name: Social Morpho ${{ steps.get_version.outputs.VERSION }}
           body: |
             # Social Morpho v${{ steps.get_version.outputs.VERSION }}
+            
+            🎉 **Built with .NET 10 and Dalamud 14.0.2.1**
             
             ## Installation
             
