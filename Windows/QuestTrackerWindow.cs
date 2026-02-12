@@ -194,7 +194,7 @@ public class QuestTrackerWindow : Window
             // Shadow
             drawList.AddText(
                 new Vector2(pos.X + 1, pos.Y + 1),
-                ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.8f)),
+                ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.5f)),
                 "❗"
             );
             
