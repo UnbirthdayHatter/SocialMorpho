@@ -5,8 +5,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
 using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace SocialMorpho.Windows;
 
@@ -63,18 +61,15 @@ public class QuestTrackerWindow : Window
                 return;
             }
 
-            var attempts = new List<string>();
-            this.CustomQuestIcon = this.TryLoadTexture(iconPath, attempts);
+            this.CustomQuestIcon = this.Plugin.TextureProvider.GetFromFile(iconPath);
             if (this.CustomQuestIcon == null)
             {
                 this.Plugin.PluginLog.Warning(
                     $"Unable to load custom icon. UiBuilder type: {this.Plugin.PluginInterface.UiBuilder.GetType().FullName}");
-                this.Plugin.PluginLog.Warning(
-                    $"No compatible image loader succeeded. Attempted: {(attempts.Count == 0 ? "<none>" : string.Join(", ", attempts))}");
                 return;
             }
 
-            if (this.TryExtractImGuiHandle(this.CustomQuestIcon, out var textureHandle))
+            if (this.TryExtractIconHandle(this.CustomQuestIcon, out var textureHandle))
             {
                 this.CustomQuestIconHandle = textureHandle;
                 this.HasCustomQuestIcon = true;
@@ -82,7 +77,7 @@ public class QuestTrackerWindow : Window
             }
             else
             {
-                this.Plugin.PluginLog.Warning($"Loaded icon did not expose ImGuiHandle for path: {iconPath}");
+                this.Plugin.PluginLog.Warning($"Loaded icon but could not resolve a draw handle for path: {iconPath}");
             }
         }
         catch (Exception ex)
@@ -91,192 +86,30 @@ public class QuestTrackerWindow : Window
         }
     }
 
-    private object? TryLoadTexture(string iconPath, List<string> attempts)
+    private bool TryExtractIconHandle(object textureObject, out ImTextureID textureHandle)
     {
-        // Probe both UiBuilder and PluginInterface for texture methods across Dalamud versions.
-        var candidates = new List<object?> { this.Plugin.PluginInterface.UiBuilder, this.Plugin.PluginInterface };
+        if (this.TryExtractImGuiHandle(textureObject, out textureHandle))
+            return true;
 
-        foreach (var target in candidates)
-        {
-            if (target == null)
-                continue;
-
-            var texture = this.TryInvokeTextureMethods(target, iconPath, attempts);
-            if (texture != null)
-                return texture;
-
-            foreach (var prop in target.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            {
-                var name = prop.Name;
-
-                object? service;
-                try
-                {
-                    service = prop.GetValue(target);
-                }
-                catch
-                {
-                    continue;
-                }
-
-                if (service == null)
-                    continue;
-
-                var serviceTypeName = service.GetType().Name;
-                var likelyService =
-                    name.Contains("Texture", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("Image", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("Icon", StringComparison.OrdinalIgnoreCase) ||
-                    serviceTypeName.Contains("Texture", StringComparison.OrdinalIgnoreCase) ||
-                    serviceTypeName.Contains("Image", StringComparison.OrdinalIgnoreCase) ||
-                    serviceTypeName.Contains("Icon", StringComparison.OrdinalIgnoreCase) ||
-                    serviceTypeName.Contains("Wrap", StringComparison.OrdinalIgnoreCase);
-
-                if (!likelyService)
-                    continue;
-
-                texture = this.TryInvokeTextureMethods(service, iconPath, attempts);
-                if (texture != null)
-                    return texture;
-            }
-        }
-
-        return null;
-    }
-
-    private object? TryInvokeTextureMethods(object target, string iconPath, List<string> attempts)
-    {
-        var iconBytes = File.ReadAllBytes(iconPath);
-
-        foreach (var method in target.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance))
-        {
-            if (!IsLikelyTextureLoader(method))
-            {
-                continue;
-            }
-
-            var parameters = method.GetParameters();
-            var args = BuildLoaderArgs(parameters, iconPath, iconBytes);
-            if (args == null)
-                continue;
-
-            attempts.Add($"{target.GetType().Name}.{method.Name}({string.Join(",", parameters.Select(p => p.ParameterType.Name))})");
-            var result = TryInvokeMethod(target, method, args);
-            if (result != null)
-                return result;
-        }
-
-        return null;
-    }
-
-    private static bool IsLikelyTextureLoader(MethodInfo method)
-    {
-        var name = method.Name;
-        var returnTypeName = method.ReturnType.Name;
-        var likelyByName =
-            name.Contains("Image", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("Texture", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("FromFile", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("FromRaw", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("GetFrom", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("CreateFrom", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("DalamudTexture", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("Icon", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("Wrap", StringComparison.OrdinalIgnoreCase);
-
-        var likelyByReturn =
-            returnTypeName.Contains("Texture", StringComparison.OrdinalIgnoreCase) ||
-            returnTypeName.Contains("Image", StringComparison.OrdinalIgnoreCase) ||
-            returnTypeName.Contains("Wrap", StringComparison.OrdinalIgnoreCase) ||
-            returnTypeName.Contains("Icon", StringComparison.OrdinalIgnoreCase);
-
-        return likelyByName || likelyByReturn;
-    }
-
-    private static object?[]? BuildLoaderArgs(ParameterInfo[] parameters, string iconPath, byte[] iconBytes)
-    {
-        var args = new object?[parameters.Length];
-
-        for (var i = 0; i < parameters.Length; i++)
-        {
-            var type = parameters[i].ParameterType;
-            if (type == typeof(string))
-            {
-                args[i] = iconPath;
-                continue;
-            }
-
-            if (type == typeof(FileInfo))
-            {
-                args[i] = new FileInfo(iconPath);
-                continue;
-            }
-
-            if (type == typeof(byte[]))
-            {
-                args[i] = iconBytes;
-                continue;
-            }
-
-            if (typeof(Stream).IsAssignableFrom(type))
-            {
-                args[i] = new MemoryStream(iconBytes, writable: false);
-                continue;
-            }
-
-            if (type == typeof(CancellationToken))
-            {
-                args[i] = CancellationToken.None;
-                continue;
-            }
-
-            if (type == typeof(bool))
-            {
-                args[i] = true;
-                continue;
-            }
-
-            if (parameters[i].HasDefaultValue)
-            {
-                args[i] = parameters[i].DefaultValue;
-                continue;
-            }
-
-            return null;
-        }
-
-        return args;
-    }
-
-    private static object? TryInvokeMethod(object target, MethodInfo method, object?[] args)
-    {
+        // ISharedImmediateTexture path in newer Dalamud.
         try
         {
-            var result = method.Invoke(target, args);
-            if (result == null)
-                return null;
-
-            if (result is Task task)
+            var getWrapOrEmpty = textureObject.GetType().GetMethod("GetWrapOrEmpty", Type.EmptyTypes);
+            if (getWrapOrEmpty != null)
             {
-                task.GetAwaiter().GetResult();
-                var resultProperty = task.GetType().GetProperty("Result");
-                return resultProperty?.GetValue(task);
+                var wrap = getWrapOrEmpty.Invoke(textureObject, Array.Empty<object>());
+                if (wrap != null && this.TryExtractImGuiHandle(wrap, out textureHandle))
+                {
+                    return true;
+                }
             }
-
-            return result;
         }
         catch
         {
-            return null;
         }
-        finally
-        {
-            foreach (var arg in args)
-            {
-                if (arg is Stream stream)
-                    stream.Dispose();
-            }
-        }
+
+        textureHandle = default;
+        return false;
     }
 
     private bool TryExtractImGuiHandle(object textureObject, out ImTextureID textureHandle)
@@ -417,8 +250,9 @@ public class QuestTrackerWindow : Window
         var progressY = objectiveY + lineHeight + 1f;
         var nextEntryY = progressY + lineHeight + 6f;
 
-        var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - 6f, titleY);
-        this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos);
+        const float titleScale = 1.06f;
+        var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - 6f, titleY, titleScale);
+        this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos, titleScale);
         this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
 
         var objectivePos = this.SetCursorForRightAlignedText(objectiveText, rightEdge, objectiveY);
@@ -432,15 +266,15 @@ public class QuestTrackerWindow : Window
         ImGui.Spacing();
     }
 
-    private Vector2 SetCursorForRightAlignedText(string text, float rightEdgeX, float y)
+    private Vector2 SetCursorForRightAlignedText(string text, float rightEdgeX, float y, float scale = 1.0f)
     {
-        var textSize = ImGui.CalcTextSize(text);
+        var textSize = ImGui.CalcTextSize(text) * scale;
         var leftX = MathF.Max(ImGui.GetWindowPos().X + 6f, rightEdgeX - textSize.X);
         ImGui.SetCursorScreenPos(new Vector2(leftX, y));
         return new Vector2(leftX, y);
     }
 
-    private void DrawHaloText(string text, Vector4 haloColor, Vector2 textPos)
+    private void DrawHaloText(string text, Vector4 haloColor, Vector2 textPos, float scale = 1.0f)
     {
         var drawList = ImGui.GetWindowDrawList();
         var haloU32 = ImGui.ColorConvertFloat4ToU32(haloColor);
@@ -456,7 +290,9 @@ public class QuestTrackerWindow : Window
         drawList.AddText(new Vector2(textPos.X + 0, textPos.Y - 2), outerHaloU32, text);
 
         ImGui.PushStyleColor(ImGuiCol.Text, this.WhiteText);
+        ImGui.SetWindowFontScale(scale);
         ImGui.TextUnformatted(text);
+        ImGui.SetWindowFontScale(1.0f);
         ImGui.PopStyleColor();
     }
 

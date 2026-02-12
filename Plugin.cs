@@ -20,6 +20,7 @@ public sealed class Plugin : IDalamudPlugin
     private IClientState ClientState { get; init; }
     private IChatGui ChatGui { get; init; }
     public IPluginLog PluginLog { get; init; }
+    public ITextureProvider TextureProvider { get; init; }
     
     public Configuration Configuration { get; init; }
     public WindowSystem WindowSystem = new("SocialMorpho");
@@ -35,13 +36,15 @@ public sealed class Plugin : IDalamudPlugin
         ICommandManager commandManager,
         IClientState clientState,
         IChatGui chatGui,
-        IPluginLog pluginLog)
+        IPluginLog pluginLog,
+        ITextureProvider textureProvider)
     {
         PluginInterface = pluginInterface;
         CommandManager = commandManager;
         ClientState = clientState;
         ChatGui = chatGui;
         PluginLog = pluginLog;
+        TextureProvider = textureProvider;
 
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
