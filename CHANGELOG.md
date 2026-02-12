@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - FFXIV-Style Quest Tracker UI Enhancement
+
+#### Quest Tracker Visual Overhaul
+- **FFXIV-Native Styling**: Completely redesigned quest tracker overlay to match FFXIV's native quest UI
+- **Color Scheme**:
+  - Quest titles now use FFXIV golden color (#D4AF37 / RGB: 0.83, 0.69, 0.22)
+  - Objective/description text uses FFXIV cyan color (#00CED1 / RGB: 0.0, 0.81, 0.82)
+  - Progress counters display in cyan to match objectives
+  - Progress bars use cyan for in-progress (instead of yellow) and bright green for completion
+- **Visual Elements**:
+  - Added quest type indicator symbols before titles: ● (Social), ◆ (Buff), ■ (Emote), ★ (Custom)
+  - Added arrow symbols (►) before objective descriptions matching FFXIV style
+  - Each quest type indicator is color-coded to its respective type
+- **Typography & Layout**:
+  - Increased spacing between quest entries for better readability
+  - Indented objective text and progress bars (20px) under quest titles for proper hierarchy
+  - Reduced progress bar size to be more subtle (260x3 instead of 280x4)
+  - Double-spaced entries matching FFXIV's quest log style
+- **Background Styling**:
+  - Enhanced semi-transparent background (75% opacity)
+  - Improved visual cohesion with FFXIV's UI panels
+
 ### Added - Quest System Implementation (PR #X)
 
 #### Critical Bug Fixes
