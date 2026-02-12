@@ -64,8 +64,7 @@ public class QuestTrackerWindow : Window
             if (File.Exists(iconPath))
             {
                 var file = new FileInfo(iconPath);
-                var textureTask = TextureProvider.GetFromFile(file);
-                CustomQuestIcon = textureTask.GetWrapOrEmpty();
+                CustomQuestIcon = TextureProvider.GetFromFile(file).GetWrapOrDefault();
                 
                 if (CustomQuestIcon != null && CustomQuestIcon.ImGuiHandle != IntPtr.Zero)
                 {
