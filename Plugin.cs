@@ -29,9 +29,11 @@ public sealed class Plugin : IDalamudPlugin
 
     private MainWindow MainWindow { get; init; }
     public QuestTrackerWindow QuestTrackerWindow { get; init; }
+    private QuestOfferWindow QuestOfferWindow { get; init; }
     private NativeQuestInjector QuestInjector { get; init; }
     public QuestManager QuestManager { get; init; }
     private QuestNotificationService QuestNotificationService { get; init; }
+    private QuestOfferService QuestOfferService { get; init; }
 
     public Plugin(
         IDalamudPluginInterface pluginInterface,
@@ -74,10 +76,13 @@ public sealed class Plugin : IDalamudPlugin
 
         MainWindow = new MainWindow(this, QuestManager);
         QuestTrackerWindow = new QuestTrackerWindow(this, QuestManager);
+        QuestOfferWindow = new QuestOfferWindow(this);
         QuestInjector = new NativeQuestInjector(this, QuestManager);
+        QuestOfferService = new QuestOfferService(this, ClientState, PluginLog, QuestOfferWindow);
 
         WindowSystem.AddWindow(MainWindow);
         WindowSystem.AddWindow(QuestTrackerWindow);
+        WindowSystem.AddWindow(QuestOfferWindow);
         
         // Show quest tracker if configured
         if (Configuration.ShowQuestTracker)
@@ -205,9 +210,19 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= DrawConfigUI;
 
         QuestNotificationService?.Dispose();
+        QuestOfferService?.Dispose();
         QuestInjector?.Dispose();
+        QuestOfferWindow?.Dispose();
         QuestTrackerWindow?.Dispose();
 
         PluginLog.Info("Social Morpho disposed");
+    }
+
+    public void TriggerQuestOfferTest()
+    {
+        if (!QuestOfferService.TriggerTestOfferPopup())
+        {
+            PluginLog.Warning("No quest offer available for manual popup test.");
+        }
     }
 }

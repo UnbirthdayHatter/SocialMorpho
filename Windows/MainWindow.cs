@@ -353,6 +353,11 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
         {
             QuestManager.ResetAllQuestProgress();
         }
+
+        if (ImGui.Button("Test Quest Popup"))
+        {
+            Plugin.TriggerQuestOfferTest();
+        }
     }
 
     private Vector4 GetQuestTypeColor(QuestType type)
