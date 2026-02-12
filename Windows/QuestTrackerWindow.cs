@@ -3,6 +3,7 @@ using Dalamud.Interface.Textures;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Windowing;
 using SocialMorpho.Data;
+using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
 
@@ -10,9 +11,10 @@ namespace SocialMorpho.Windows;
 
 public class QuestTrackerWindow : Window
 {
-    private const float IconSize = 27f;
+    private const float ContainerWidth = 250f;
+    private const float IconSize = 26f;
     private const float IconGap = 2f;
-    private const float RightPadding = 14f;
+    private const float RightPadding = 10f;
 
     private readonly Plugin Plugin;
     private readonly QuestManager QuestManager;
@@ -20,11 +22,9 @@ public class QuestTrackerWindow : Window
     private string? LoadedIconPath;
     private bool LoggedWrapFailure;
 
-    // Tuned toward native Duty List styling.
-    private readonly Vector4 FFXIVGold = new(0.90f, 0.76f, 0.51f, 0.36f); // ~#E5C383 halo
-    private readonly Vector4 FFXIVBlue = new(0.41f, 0.80f, 0.95f, 0.34f); // sampled cyan halo
-    private readonly Vector4 WhiteText = new(0.95f, 0.95f, 0.95f, 1.0f); // ~#F2F2F2
-    private readonly Vector4 DropShadow = new(0.12f, 0.08f, 0.04f, 0.42f); // thin dark brown shadow
+    private readonly Vector4 TitleColor = new(0.898f, 0.765f, 0.514f, 1.0f); // #E5C383
+    private readonly Vector4 BodyColor = new(0.949f, 0.949f, 0.949f, 1.0f); // #F2F2F2
+    private readonly Vector4 ShadowColor = new(0f, 0f, 0f, 0.70f);
 
     public QuestTrackerWindow(Plugin plugin, QuestManager questManager)
         : base("Quest Tracker##SocialMorphoTracker",
@@ -110,34 +110,47 @@ public class QuestTrackerWindow : Window
             ? quest.Description
             : $"Complete {quest.GoalCount} objectives";
 
-        var baseCursor = ImGui.GetCursorScreenPos();
         var rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X - RightPadding;
+        var leftEdge = rightEdge - ContainerWidth;
         var iconWidth = this.CustomQuestIcon != null ? IconSize : 12f;
-        var lineHeight = ImGui.GetTextLineHeight();
-        var textRightLimit = rightEdge - iconWidth - IconGap - 6f;
-        var titleY = baseCursor.Y;
-        var objectiveY = titleY + lineHeight + 3f;
-        var progressY = objectiveY + lineHeight + 1f;
-        var nextEntryY = progressY + lineHeight + 6f;
+        var textRightEdge = rightEdge - iconWidth - IconGap;
+        var maxTextWidth = MathF.Max(60f, textRightEdge - leftEdge);
 
-        const float titleScale = 1.18f;
-        const float bodyScale = 1.08f;
-        var titlePos = this.SetCursorForRightAlignedText(quest.Title, textRightLimit, titleY, titleScale);
-        this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos, titleScale, bold: true);
-        this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
+        const float titleScale = 1.10f;
+        const float bodyScale = 1.00f;
 
-        var objectivePos = this.SetCursorForRightAlignedText(objectiveText, textRightLimit, objectiveY, bodyScale);
-        this.DrawHaloText(objectiveText, this.FFXIVBlue, objectivePos, bodyScale);
+        var y = MathF.Round(ImGui.GetCursorScreenPos().Y);
 
+        var titleLines = this.WrapToWidth(quest.Title, maxTextWidth, titleScale);
+        foreach (var line in titleLines)
+        {
+            var pos = this.SetCursorForRightAlignedText(line, textRightEdge, y, titleScale);
+            this.DrawShadowedText(line, this.TitleColor, pos, titleScale, bold: true);
+            y += ImGui.GetTextLineHeight() * titleScale;
+        }
+
+        this.DrawCustomIconAt(rightEdge - iconWidth, MathF.Round(ImGui.GetCursorScreenPos().Y));
+
+        y += 3f;
+        var objectiveLines = this.WrapToWidth(objectiveText, maxTextWidth, bodyScale);
+        foreach (var line in objectiveLines)
+        {
+            var pos = this.SetCursorForRightAlignedText(line, textRightEdge, y, bodyScale);
+            this.DrawShadowedText(line, this.BodyColor, pos, bodyScale);
+            y += ImGui.GetTextLineHeight() * bodyScale;
+        }
+
+        y += 1f;
         var progressText = $"{quest.CurrentCount}/{quest.GoalCount}";
-        var progressPos = this.SetCursorForRightAlignedText(progressText, textRightLimit, progressY, bodyScale);
-        this.DrawHaloText(progressText, this.FFXIVBlue, progressPos, bodyScale);
+        var progressPos = this.SetCursorForRightAlignedText(progressText, textRightEdge, y, bodyScale);
+        this.DrawShadowedText(progressText, this.BodyColor, progressPos, bodyScale);
 
-        ImGui.SetCursorScreenPos(new Vector2(baseCursor.X, nextEntryY));
+        y += ImGui.GetTextLineHeight() * bodyScale + 6f;
+        ImGui.SetCursorScreenPos(new Vector2(leftEdge, y));
         ImGui.Spacing();
     }
 
-    private Vector2 SetCursorForRightAlignedText(string text, float rightEdgeX, float y, float scale = 1.0f)
+    private Vector2 SetCursorForRightAlignedText(string text, float rightEdgeX, float y, float scale)
     {
         var textSize = ImGui.CalcTextSize(text) * scale;
         var leftX = MathF.Max(ImGui.GetWindowPos().X + 6f, rightEdgeX - textSize.X);
@@ -147,25 +160,18 @@ public class QuestTrackerWindow : Window
         return new Vector2(leftX, y);
     }
 
-    private void DrawHaloText(string text, Vector4 haloColor, Vector2 textPos, float scale = 1.0f, bool bold = false)
+    private void DrawShadowedText(string text, Vector4 textColor, Vector2 textPos, float scale, bool bold = false)
     {
         var drawList = ImGui.GetWindowDrawList();
-        var haloU32 = ImGui.ColorConvertFloat4ToU32(haloColor);
-        var shadowU32 = ImGui.ColorConvertFloat4ToU32(this.DropShadow);
-
-        // Thin shadow + crisp halo.
+        var shadowU32 = ImGui.ColorConvertFloat4ToU32(this.ShadowColor);
         drawList.AddText(new Vector2(textPos.X + 1, textPos.Y + 1), shadowU32, text);
-        drawList.AddText(new Vector2(textPos.X + 1, textPos.Y + 0), haloU32, text);
-        drawList.AddText(new Vector2(textPos.X - 1, textPos.Y + 0), haloU32, text);
-        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y + 1), haloU32, text);
-        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y - 1), haloU32, text);
 
         ImGui.SetWindowFontScale(scale);
-        ImGui.PushStyleColor(ImGuiCol.Text, this.WhiteText);
+        ImGui.PushStyleColor(ImGuiCol.Text, textColor);
         if (bold)
         {
-            var whiteU32 = ImGui.ColorConvertFloat4ToU32(this.WhiteText);
-            drawList.AddText(textPos, whiteU32, text);
+            var textU32 = ImGui.ColorConvertFloat4ToU32(textColor);
+            drawList.AddText(textPos, textU32, text);
         }
         ImGui.TextUnformatted(text);
         ImGui.PopStyleColor();
@@ -182,7 +188,7 @@ public class QuestTrackerWindow : Window
             wrap is IDrawListTextureWrap drawListWrap)
         {
             var drawList = ImGui.GetWindowDrawList();
-            drawListWrap.Draw(drawList, new Vector2(x, y - 1f), new Vector2(x + IconSize, y - 1f + IconSize));
+            drawListWrap.Draw(drawList, new Vector2(x, y), new Vector2(x + IconSize, y + IconSize));
             return;
         }
 
@@ -203,7 +209,7 @@ public class QuestTrackerWindow : Window
         }
 
         var fallbackDrawList = ImGui.GetWindowDrawList();
-        fallbackDrawList.AddText(new Vector2(x, y), ImGui.ColorConvertFloat4ToU32(this.FFXIVGold), "!");
+        fallbackDrawList.AddText(new Vector2(x, y), ImGui.ColorConvertFloat4ToU32(this.TitleColor), "!");
     }
 
     private static bool TryGetImGuiTextureFromWrap(IDalamudTextureWrap wrap, out ImTextureID textureId)
@@ -288,6 +294,46 @@ public class QuestTrackerWindow : Window
 
         textureId = default;
         return false;
+    }
+
+    private List<string> WrapToWidth(string text, float maxWidth, float scale)
+    {
+        var result = new List<string>();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            result.Add(string.Empty);
+            return result;
+        }
+
+        foreach (var paragraph in text.Replace("\r", string.Empty).Split('\n'))
+        {
+            var words = paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length == 0)
+            {
+                result.Add(string.Empty);
+                continue;
+            }
+
+            var current = words[0];
+            for (var i = 1; i < words.Length; i++)
+            {
+                var candidate = $"{current} {words[i]}";
+                var width = ImGui.CalcTextSize(candidate).X * scale;
+                if (width <= maxWidth)
+                {
+                    current = candidate;
+                }
+                else
+                {
+                    result.Add(current);
+                    current = words[i];
+                }
+            }
+
+            result.Add(current);
+        }
+
+        return result;
     }
 
     public void Dispose()
