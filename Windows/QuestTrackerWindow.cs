@@ -18,9 +18,9 @@ public class QuestTrackerWindow : Window
     private ImTextureID CustomQuestIconHandle;
     private bool HasCustomQuestIcon;
 
-    // Tuned to match requested FFXIV-like tones.
-    private readonly Vector4 FFXIVGold = new(0.7137f, 0.6196f, 0.3765f, 1.0f); // #b69e60
-    private readonly Vector4 FFXIVBlue = new(0.3059f, 0.5765f, 0.6941f, 1.0f); // #4e93b1
+    // Soft halo tones tuned toward native quest styling.
+    private readonly Vector4 FFXIVGold = new(0.70f, 0.64f, 0.45f, 0.56f);
+    private readonly Vector4 FFXIVBlue = new(0.36f, 0.63f, 0.74f, 0.54f);
     private readonly Vector4 WhiteText = new(1.0f, 1.0f, 1.0f, 1.0f);
 
     public QuestTrackerWindow(Plugin plugin, QuestManager questManager)
@@ -69,10 +69,8 @@ public class QuestTrackerWindow : Window
             {
                 this.Plugin.PluginLog.Warning(
                     $"Unable to load custom icon. UiBuilder type: {this.Plugin.PluginInterface.UiBuilder.GetType().FullName}");
-                if (attempts.Count > 0)
-                {
-                    this.Plugin.PluginLog.Warning($"No compatible image loader succeeded. Attempted: {string.Join(", ", attempts)}");
-                }
+                this.Plugin.PluginLog.Warning(
+                    $"No compatible image loader succeeded. Attempted: {(attempts.Count == 0 ? "<none>" : string.Join(", ", attempts))}");
                 return;
             }
 
@@ -110,11 +108,6 @@ public class QuestTrackerWindow : Window
             foreach (var prop in target.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
                 var name = prop.Name;
-                if (!name.Contains("Texture", StringComparison.OrdinalIgnoreCase) &&
-                    !name.Contains("Image", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
 
                 object? service;
                 try
@@ -127,6 +120,19 @@ public class QuestTrackerWindow : Window
                 }
 
                 if (service == null)
+                    continue;
+
+                var serviceTypeName = service.GetType().Name;
+                var likelyService =
+                    name.Contains("Texture", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("Image", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("Icon", StringComparison.OrdinalIgnoreCase) ||
+                    serviceTypeName.Contains("Texture", StringComparison.OrdinalIgnoreCase) ||
+                    serviceTypeName.Contains("Image", StringComparison.OrdinalIgnoreCase) ||
+                    serviceTypeName.Contains("Icon", StringComparison.OrdinalIgnoreCase) ||
+                    serviceTypeName.Contains("Wrap", StringComparison.OrdinalIgnoreCase);
+
+                if (!likelyService)
                     continue;
 
                 texture = this.TryInvokeTextureMethods(service, iconPath, attempts);
@@ -144,8 +150,7 @@ public class QuestTrackerWindow : Window
 
         foreach (var method in target.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (!method.Name.Contains("Image", StringComparison.OrdinalIgnoreCase) &&
-                !method.Name.Contains("Texture", StringComparison.OrdinalIgnoreCase))
+            if (!IsLikelyTextureLoader(method))
             {
                 continue;
             }
@@ -164,6 +169,30 @@ public class QuestTrackerWindow : Window
         return null;
     }
 
+    private static bool IsLikelyTextureLoader(MethodInfo method)
+    {
+        var name = method.Name;
+        var returnTypeName = method.ReturnType.Name;
+        var likelyByName =
+            name.Contains("Image", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("Texture", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("FromFile", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("FromRaw", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("GetFrom", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("CreateFrom", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("DalamudTexture", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("Icon", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("Wrap", StringComparison.OrdinalIgnoreCase);
+
+        var likelyByReturn =
+            returnTypeName.Contains("Texture", StringComparison.OrdinalIgnoreCase) ||
+            returnTypeName.Contains("Image", StringComparison.OrdinalIgnoreCase) ||
+            returnTypeName.Contains("Wrap", StringComparison.OrdinalIgnoreCase) ||
+            returnTypeName.Contains("Icon", StringComparison.OrdinalIgnoreCase);
+
+        return likelyByName || likelyByReturn;
+    }
+
     private static object?[]? BuildLoaderArgs(ParameterInfo[] parameters, string iconPath, byte[] iconBytes)
     {
         var args = new object?[parameters.Length];
@@ -177,9 +206,21 @@ public class QuestTrackerWindow : Window
                 continue;
             }
 
+            if (type == typeof(FileInfo))
+            {
+                args[i] = new FileInfo(iconPath);
+                continue;
+            }
+
             if (type == typeof(byte[]))
             {
                 args[i] = iconBytes;
+                continue;
+            }
+
+            if (typeof(Stream).IsAssignableFrom(type))
+            {
+                args[i] = new MemoryStream(iconBytes, writable: false);
                 continue;
             }
 
@@ -227,6 +268,14 @@ public class QuestTrackerWindow : Window
         catch
         {
             return null;
+        }
+        finally
+        {
+            foreach (var arg in args)
+            {
+                if (arg is Stream stream)
+                    stream.Dispose();
+            }
         }
     }
 
@@ -359,43 +408,52 @@ public class QuestTrackerWindow : Window
             ? quest.Description
             : $"Complete {quest.GoalCount} objectives";
 
+        var baseCursor = ImGui.GetCursorScreenPos();
         var rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X - 8f;
         var iconWidth = this.HasCustomQuestIcon ? 20f : 12f;
-        var lineSpacing = 2f;
+        var lineHeight = ImGui.GetTextLineHeight();
+        var titleY = baseCursor.Y;
+        var objectiveY = titleY + lineHeight + 2f;
+        var progressY = objectiveY + lineHeight + 1f;
+        var nextEntryY = progressY + lineHeight + 6f;
 
-        var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - 6f);
+        var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - 6f, titleY);
         this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos);
         this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
 
-        var objectivePos = this.SetCursorForRightAlignedText(objectiveText, rightEdge);
+        var objectivePos = this.SetCursorForRightAlignedText(objectiveText, rightEdge, objectiveY);
         this.DrawHaloText(objectiveText, this.FFXIVBlue, objectivePos);
 
         var progressText = $"{quest.CurrentCount}/{quest.GoalCount}";
-        var progressPos = this.SetCursorForRightAlignedText(progressText, rightEdge);
+        var progressPos = this.SetCursorForRightAlignedText(progressText, rightEdge, progressY);
         this.DrawHaloText(progressText, this.FFXIVBlue, progressPos);
 
-        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + lineSpacing);
+        ImGui.SetCursorScreenPos(new Vector2(baseCursor.X, nextEntryY));
         ImGui.Spacing();
     }
 
-    private Vector2 SetCursorForRightAlignedText(string text, float rightEdgeX)
+    private Vector2 SetCursorForRightAlignedText(string text, float rightEdgeX, float y)
     {
         var textSize = ImGui.CalcTextSize(text);
-        var cursorScreen = ImGui.GetCursorScreenPos();
         var leftX = MathF.Max(ImGui.GetWindowPos().X + 6f, rightEdgeX - textSize.X);
-        var localX = leftX - ImGui.GetWindowPos().X;
-        ImGui.SetCursorPosX(localX);
-        return new Vector2(leftX, cursorScreen.Y);
+        ImGui.SetCursorScreenPos(new Vector2(leftX, y));
+        return new Vector2(leftX, y);
     }
 
     private void DrawHaloText(string text, Vector4 haloColor, Vector2 textPos)
     {
         var drawList = ImGui.GetWindowDrawList();
         var haloU32 = ImGui.ColorConvertFloat4ToU32(haloColor);
+        var outerHalo = new Vector4(haloColor.X, haloColor.Y, haloColor.Z, haloColor.W * 0.45f);
+        var outerHaloU32 = ImGui.ColorConvertFloat4ToU32(outerHalo);
         drawList.AddText(new Vector2(textPos.X + 1, textPos.Y + 0), haloU32, text);
         drawList.AddText(new Vector2(textPos.X - 1, textPos.Y + 0), haloU32, text);
         drawList.AddText(new Vector2(textPos.X + 0, textPos.Y + 1), haloU32, text);
         drawList.AddText(new Vector2(textPos.X + 0, textPos.Y - 1), haloU32, text);
+        drawList.AddText(new Vector2(textPos.X + 2, textPos.Y + 0), outerHaloU32, text);
+        drawList.AddText(new Vector2(textPos.X - 2, textPos.Y + 0), outerHaloU32, text);
+        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y + 2), outerHaloU32, text);
+        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y - 2), outerHaloU32, text);
 
         ImGui.PushStyleColor(ImGuiCol.Text, this.WhiteText);
         ImGui.TextUnformatted(text);
