@@ -1,6 +1,5 @@
 using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.Internal;
 using SocialMorpho.Data;
 using System.IO;
 using System.Numerics;
@@ -12,7 +11,6 @@ public class QuestTrackerWindow : Window
 {
     private Plugin Plugin;
     private QuestManager QuestManager;
-    private IDalamudTextureWrap? CustomQuestIcon;
 
     // FFXIV color scheme
     private readonly Vector4 FFXIVGold = new(0.83f, 0.69f, 0.22f, 1.0f);      // #D4AF37
@@ -32,47 +30,15 @@ public class QuestTrackerWindow : Window
     {
         Plugin = plugin;
         QuestManager = questManager;
-        LoadCustomIcon();
+        
+        // TODO: Re-enable custom icon loading when Dalamud API is stable
+        Plugin.PluginLog.Info("Quest Tracker initialized - using fallback icon");
 
         // Position will be set in PreDraw to ensure accurate screen size
         PositionCondition = ImGuiCond.FirstUseEver;
 
         // Semi-transparent background
         BgAlpha = 0.75f;
-    }
-
-    private void LoadCustomIcon()
-    {
-        try
-        {
-            // Try loading from file system first
-            var assemblyDir = Plugin.PluginInterface.AssemblyLocation.DirectoryName;
-            if (string.IsNullOrEmpty(assemblyDir))
-            {
-                Plugin.PluginLog.Warning("Assembly directory path is null or empty, cannot load custom quest icon");
-                return;
-            }
-
-            var iconPath = Path.Combine(
-                assemblyDir,
-                "Resources",
-                "quest_icon.png"
-            );
-
-            if (File.Exists(iconPath))
-            {
-                CustomQuestIcon = Plugin.PluginInterface.UiBuilder.LoadImage(iconPath);
-                Plugin.PluginLog.Info($"Custom quest icon loaded from: {iconPath}");
-            }
-            else
-            {
-                Plugin.PluginLog.Warning($"Custom quest icon not found at: {iconPath}");
-            }
-        }
-        catch (Exception ex)
-        {
-            Plugin.PluginLog.Error($"Failed to load custom quest icon: {ex}");
-        }
     }
 
     public override void PreDraw()
@@ -166,42 +132,20 @@ public class QuestTrackerWindow : Window
 
     private void DrawCustomIcon()
     {
-        if (CustomQuestIcon != null)
-        {
-            var pos = ImGui.GetCursorScreenPos();
-            var drawList = ImGui.GetWindowDrawList();
-            
-            // Draw icon shadow (subtle black shadow behind)
-            drawList.AddImage(
-                CustomQuestIcon.ImGuiHandle,
-                new Vector2(pos.X + 1, pos.Y + 1),
-                new Vector2(pos.X + 21, pos.Y + 21),
-                Vector2.Zero,
-                Vector2.One,
-                ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.5f))
-            );
-            
-            // Draw main icon
-            ImGui.Image(CustomQuestIcon.ImGuiHandle, new Vector2(20, 20));
-            ImGui.SameLine();
-        }
-        else
-        {
-            // Fallback: show exclamation mark if icon fails to load
-            var pos = ImGui.GetCursorScreenPos();
-            var drawList = ImGui.GetWindowDrawList();
-            
-            // Shadow
-            drawList.AddText(
-                new Vector2(pos.X + 1, pos.Y + 1),
-                ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.5f)),
-                "❗"
-            );
-            
-            // Main text
-            ImGui.TextColored(new Vector4(1.0f, 0.84f, 0.0f, 1.0f), "❗");
-            ImGui.SameLine();
-        }
+        // Always use fallback icon (Dalamud API changes made custom icon loading difficult)
+        var pos = ImGui.GetCursorScreenPos();
+        var drawList = ImGui.GetWindowDrawList();
+        
+        // Shadow
+        drawList.AddText(
+            new Vector2(pos.X + 1, pos.Y + 1),
+            ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.5f)),
+            "❗"
+        );
+        
+        // Main text
+        ImGui.TextColored(new Vector4(1.0f, 0.84f, 0.0f, 1.0f), "❗");
+        ImGui.SameLine();
     }
 
     private Vector4 GetProgressBarColor(float progress)
@@ -216,6 +160,6 @@ public class QuestTrackerWindow : Window
 
     public void Dispose()
     {
-        CustomQuestIcon?.Dispose();
+        // ImGui handles are managed by Dalamud, no explicit disposal needed
     }
 }
