@@ -114,9 +114,9 @@ public class QuestTrackerWindow : Window
         var progressY = objectiveY + lineHeight + 1f;
         var nextEntryY = progressY + lineHeight + 6f;
 
-        const float titleScale = 1.10f;
+        const float titleScale = 1.00f;
         var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - 6f, titleY, titleScale);
-        this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos, titleScale);
+        this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos, titleScale, bold: true);
         this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
 
         var objectivePos = this.SetCursorForRightAlignedText(objectiveText, rightEdge, objectiveY);
@@ -140,7 +140,7 @@ public class QuestTrackerWindow : Window
         return new Vector2(leftX, y);
     }
 
-    private void DrawHaloText(string text, Vector4 haloColor, Vector2 textPos, float scale = 1.0f)
+    private void DrawHaloText(string text, Vector4 haloColor, Vector2 textPos, float scale = 1.0f, bool bold = false)
     {
         var drawList = ImGui.GetWindowDrawList();
         var haloU32 = ImGui.ColorConvertFloat4ToU32(haloColor);
@@ -151,11 +151,14 @@ public class QuestTrackerWindow : Window
         drawList.AddText(new Vector2(textPos.X + 0, textPos.Y + 1), haloU32, text);
         drawList.AddText(new Vector2(textPos.X + 0, textPos.Y - 1), haloU32, text);
 
-        ImGui.SetWindowFontScale(scale);
         ImGui.PushStyleColor(ImGuiCol.Text, this.WhiteText);
+        if (bold)
+        {
+            var whiteU32 = ImGui.ColorConvertFloat4ToU32(this.WhiteText);
+            drawList.AddText(textPos, whiteU32, text);
+        }
         ImGui.TextUnformatted(text);
         ImGui.PopStyleColor();
-        ImGui.SetWindowFontScale(1.0f);
     }
 
     private void DrawCustomIconAt(float x, float y)
@@ -172,6 +175,15 @@ public class QuestTrackerWindow : Window
             return;
         }
 
+        if (this.CustomQuestIcon != null &&
+            this.CustomQuestIcon.TryGetWrap(out var wrapForHandle, out _) &&
+            TryGetImGuiTextureFromWrap(wrapForHandle, out var textureId))
+        {
+            ImGui.SetCursorScreenPos(new Vector2(x, y));
+            ImGui.Image(textureId, new Vector2(20f, 20f));
+            return;
+        }
+
         if (this.CustomQuestIcon != null && !this.LoggedWrapFailure)
         {
             this.LoggedWrapFailure = true;
@@ -181,6 +193,90 @@ public class QuestTrackerWindow : Window
 
         var fallbackDrawList = ImGui.GetWindowDrawList();
         fallbackDrawList.AddText(new Vector2(x, y), ImGui.ColorConvertFloat4ToU32(this.FFXIVGold), "!");
+    }
+
+    private static bool TryGetImGuiTextureFromWrap(IDalamudTextureWrap wrap, out ImTextureID textureId)
+    {
+        try
+        {
+            var handleValue = wrap.GetType().GetProperty("Handle")?.GetValue(wrap);
+            if (TryCreateTextureIdFromValue(handleValue, out var id))
+            {
+                textureId = id;
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        textureId = default;
+        return false;
+    }
+
+    private static bool TryCreateTextureIdFromValue(object? value, out ImTextureID textureId)
+    {
+        if (value is ImTextureID direct)
+        {
+            textureId = direct;
+            return true;
+        }
+
+        if (value == null)
+        {
+            textureId = default;
+            return false;
+        }
+
+        var textureType = typeof(ImTextureID);
+        var valueType = value.GetType();
+
+        var operators = textureType.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+            .Where(m =>
+                (m.Name == "op_Implicit" || m.Name == "op_Explicit") &&
+                m.ReturnType == textureType &&
+                m.GetParameters().Length == 1);
+        foreach (var op in operators)
+        {
+            var paramType = op.GetParameters()[0].ParameterType;
+            try
+            {
+                var arg = paramType.IsAssignableFrom(valueType) ? value : Convert.ChangeType(value, paramType);
+                var result = op.Invoke(null, new[] { arg });
+                if (result is ImTextureID converted)
+                {
+                    textureId = converted;
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        foreach (var ctor in textureType.GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+        {
+            var p = ctor.GetParameters();
+            if (p.Length != 1)
+                continue;
+
+            try
+            {
+                var arg = p[0].ParameterType.IsAssignableFrom(valueType) ? value : Convert.ChangeType(value, p[0].ParameterType);
+                var created = ctor.Invoke(new[] { arg });
+                if (created is ImTextureID typed)
+                {
+                    textureId = typed;
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        textureId = default;
+        return false;
     }
 
     public void Dispose()
