@@ -76,20 +76,19 @@
 │  │  • Progress bars with color coding                       │  │
 │  │  • Quest type badges                                     │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                             │                                    │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │ QuestTrackerWindow.cs                                      │  │
-│  │  • Quest tracker overlay (FFXIV-style)                    │  │
-│  │  • Shows active quests only                               │  │
-│  │  • Top-right positioning                                  │  │
-│  │  • Semi-transparent background                            │  │
-│  │  • No title bar, no resize                                │  │
-│  │  • Real-time quest updates                                │  │
-│  │  • Color-coded progress bars                              │  │
-│  └───────────────────────────────────────────────────────────┘  │
 │                                                                  │
 ├──────────────────────────────────────────────────────────────────┤
 │                        Services Layer                            │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ NativeQuestInjector.cs                                     │  │
+│  │  • Subscribes to FrameworkUpdate events                    │  │
+│  │  • Injects custom quests into FFXIV's native ToDoList    │  │
+│  │  • Manipulates ToDoListStringArray and NumberArray        │  │
+│  │  • Marshals quest strings to unmanaged memory             │  │
+│  │  • Sets quest icons, progress counters, objectives       │  │
+│  │  • Proper memory cleanup on disposal                      │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                             │                                    │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │ QuestNotificationService.cs                                │  │
 │  │  • Subscribes to IClientState.Login event                 │  │
@@ -206,34 +205,64 @@ Check for duplicates ───No──► Add to SavedQuests
                           Quest appears in list
 ```
 
-### Quest Tracker Update Flow
+### Native Quest Injection Flow
 
 ```
-WindowSystem.Draw() called every frame
+FrameworkUpdate event fired every frame
       │
       ▼
-QuestTrackerWindow.PreDraw()
+NativeQuestInjector.OnFrameworkUpdate()
       │
       ▼
 Check if ShowQuestTracker is enabled
       │
-      ├─No──► Hide window
+      ├─No──► Exit
       │
       ▼ Yes
-QuestTrackerWindow.Draw()
+InjectCustomQuests()
+      │
+      ▼
+Get ToDoListStringArray and NumberArray instances
       │
       ▼
 Get active quests from QuestManager
       │
       ▼
-For each active quest:
-      │
-      ├──► Display quest title
-      ├──► Display progress (X/Y)
-      └──► Draw progress bar with color coding
+Calculate starting index after native quests
       │
       ▼
-Render complete
+Free previously allocated strings
+      │
+      ▼
+For each custom quest (up to 10 total):
+      │
+      ├──► Allocate UTF-8 string for title
+      ├──► Allocate UTF-8 string for objective + progress
+      ├──► Set quest icon based on type
+      ├──► Set objective count
+      ├──► Set objective progress
+      └──► Set button count
+      │
+      ▼
+Update total quest count in NumberArray
+      │
+      ▼
+Enable quest list
+      │
+      ▼
+FFXIV displays custom quests in native ToDoList
+```
+
+### Quest Tracker Update Flow (DEPRECATED - Now using native injection)
+
+```
+WindowSystem.Draw() called every frame (MainWindow only)
+      │
+      ▼
+MainWindow.Draw() if open
+      │
+      ▼
+Display quest list, dialogs, and settings
 ```
 
 ### Login Notification Flow

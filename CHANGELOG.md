@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed - Native Quest Injection Implementation
+- **Replaced ImGui Overlay**: Removed `QuestTrackerWindow.cs` ImGui overlay in favor of true native injection
+- **Native Integration**: Custom quests now appear directly in FFXIV's native `_ToDoList` addon
+- **Memory Manipulation**: Direct manipulation of `ToDoListStringArray` and `ToDoListNumberArray` structures
+- **Seamless Display**: Custom quests appear exactly like native FFXIV quests with no visual difference
+- **Implementation**: Created `Services/NativeQuestInjector.cs` that:
+  - Uses FrameworkUpdate for injection timing
+  - Marshals UTF-8 strings to unmanaged memory for quest text
+  - Populates native quest arrays with custom quest data
+  - Handles proper memory cleanup and disposal
+  - Respects the 10-quest limit (native + custom combined)
+
 ### Added - FFXIV-Style Quest Tracker UI Enhancement
 
 #### Quest Tracker Visual Overhaul
@@ -158,7 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Files Created
 1. `Data/QuestLoader.cs` - JSON quest loading utilities (73 lines)
 2. `Services/QuestNotificationService.cs` - Login notification handler (58 lines)
-3. `Windows/QuestTrackerWindow.cs` - Quest tracker overlay window (111 lines)
+3. `Services/NativeQuestInjector.cs` - Native quest injection into FFXIV ToDoList (141 lines)
 4. `Quests.json` - Example quest data file (24 lines)
 5. `IMPLEMENTATION_SUMMARY.md` - Implementation documentation (282 lines)
 6. `UI_GUIDE.md` - UI design guide (215 lines)
