@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI;
@@ -42,41 +42,7 @@ public unsafe class NativeQuestInjector : IDisposable
 
     private void InjectCustomQuests()
     {
-<<<<<<< HEAD
-        var raptureTextModule = RaptureTextModule.Instance();
-        if (raptureTextModule == null) return;
-
-        var activeQuests = QuestManager.GetActiveQuests();
-        if (activeQuests.Count == 0) return;
-
-        // Access the number and string arrays
-        var numberArrays = raptureTextModule->NumberArrayData;
-        var stringArrays = raptureTextModule->StringArrayData;
-
-        // ToDoList arrays - need to find the correct indices
-        // Let's try accessing them directly
-        for (int i = 0; i < activeQuests.Count && i < 5; i++)
-        {
-            var quest = activeQuests[i];
-            Plugin.PluginLog.Info($"Processing quest: {quest.Title} ({quest.CurrentCount}/{quest.GoalCount})");
-        }
-    }
-
-    private IntPtr AllocateString(string text)
-    {
-        var bytes = Encoding.UTF8.GetBytes(text + "\0");
-        var ptr = Marshal.AllocHGlobal(bytes.Length);
-        Marshal.Copy(bytes, 0, ptr, bytes.Length);
-        AllocatedStrings.Add(ptr);
-        return ptr;
-    }
-
-    private void FreeAllocatedStrings()
-    {
-        foreach (var ptr in AllocatedStrings)
-=======
         try
->>>>>>> a2b1772574f695eb0e69a613247bf2d9665d1eec
         {
             var activeQuests = QuestManager.GetActiveQuests();
             if (activeQuests.Count == 0) return;
@@ -88,7 +54,7 @@ public unsafe class NativeQuestInjector : IDisposable
             // Get number array using the proper method
             var numberArray = AtkStage.Instance()->GetNumberArrayData(NumberArrayType.ToDoList);
             if (numberArray == null) return;
-            
+
             var todoNumberArray = (ToDoListNumberArray*)numberArray->IntArray;
 
             // Get the current number of native quests from the correct field
@@ -124,13 +90,13 @@ public unsafe class NativeQuestInjector : IDisposable
 
                 // Set quest icon using the correct field
                 todoNumberArray->QuestTypeIcon[questSlot] = iconId;
-                
+
                 // Set objective count
                 todoNumberArray->ObjectiveCountForQuest[questSlot] = 1;
-                
+
                 // Set current progress
                 todoNumberArray->ObjectiveProgress[questSlot] = quest.CurrentCount;
-                
+
                 // Set button count
                 todoNumberArray->ButtonCountForQuest[questSlot] = 0;
 
@@ -139,7 +105,7 @@ public unsafe class NativeQuestInjector : IDisposable
 
             // Update total quest count
             todoNumberArray->QuestCount = nativeQuestCount + injectedCount;
-            
+
             // Enable quest list
             todoNumberArray->QuestListEnabled = true;
 
