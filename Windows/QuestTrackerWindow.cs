@@ -1,13 +1,12 @@
 using Dalamud.Interface.Windowing;
 using ImGuiNET;
 using SocialMorpho.Data;
-using System;
 using System.Numerics;
 using System.Linq;
 
 namespace SocialMorpho.Windows;
 
-public class QuestTrackerWindow : Window, IDisposable
+public class QuestTrackerWindow : Window
 {
     private Plugin Plugin;
     private QuestManager QuestManager;
@@ -35,8 +34,7 @@ public class QuestTrackerWindow : Window, IDisposable
         Plugin = plugin;
         QuestManager = questManager;
 
-        // Position in top-right area (will be adjusted based on screen size)
-        Position = new Vector2(ImGui.GetIO().DisplaySize.X - 380, 100);
+        // Position will be set in PreDraw to ensure accurate screen size
         PositionCondition = ImGuiCond.FirstUseEver;
 
         // Semi-transparent background
@@ -50,6 +48,12 @@ public class QuestTrackerWindow : Window, IDisposable
         {
             IsOpen = false;
             return;
+        }
+
+        // Set position based on current screen size (only on first use)
+        if (!Position.HasValue)
+        {
+            Position = new Vector2(ImGui.GetIO().DisplaySize.X - 380, 100);
         }
 
         base.PreDraw();
@@ -165,10 +169,5 @@ public class QuestTrackerWindow : Window, IDisposable
             return ProgressActive;      // FFXIV Cyan for in-progress
         else
             return ProgressInactive;    // Dark Gray for not started
-    }
-
-    public void Dispose()
-    {
-        // Nothing to dispose
     }
 }
