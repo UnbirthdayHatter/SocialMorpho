@@ -44,8 +44,8 @@ This approach is more stable than using hardcoded array IDs (72, 73) as it uses 
 The following approach was intended but requires `InteropGenerator.Runtime` dependency:
 ```csharp
 // TODO: Requires InteropGenerator.Runtime dependency
-// stringArray->SetValue(questIndex * 3, quest.Title, false, true, false);
-// stringArray->SetValue(questIndex * 3 + 1, objectiveText, false, true, false);
+// stringArray->SetValue(questSlot * 3, quest.Title, false, true, false);
+// stringArray->SetValue(questSlot * 3 + 1, objectiveText, false, true, false);
 ```
 
 **Current Implementation**: Quest display uses `QuestTrackerWindow.cs` ImGui overlay instead.
@@ -54,10 +54,10 @@ The following approach was intended but requires `InteropGenerator.Runtime` depe
 
 #### Number Array Updates
 ```csharp
-numberArray->IntArray[questIndex * 10 + 1] = iconId;
-numberArray->IntArray[questIndex * 10 + 2] = 1;
-numberArray->IntArray[questIndex * 10 + 3] = quest.CurrentCount;
-numberArray->IntArray[questIndex * 10 + 4] = quest.GoalCount;
+numberArray->IntArray[questSlot * 10 + 1] = iconId;
+numberArray->IntArray[questSlot * 10 + 2] = 1;
+numberArray->IntArray[questSlot * 10 + 3] = quest.CurrentCount;
+numberArray->IntArray[questSlot * 10 + 4] = quest.GoalCount;
 ```
 - Each quest uses multiple integer slots for metadata
 - Stores icon ID, objective count, current progress, and goal count
@@ -71,8 +71,8 @@ numberArray->IntArray[questIndex * 10 + 4] = quest.GoalCount;
 These use FFXIVClientStructs enum types and are more version-stable than hardcoded IDs.
 
 ### Array Indexing
-- **String Array**: `questIndex * 3` for title, `questIndex * 3 + 1` for objective
-- **Number Array**: `questIndex * 10 + offset` for various metadata
+- **String Array**: `questSlot * 3` for title, `questSlot * 3 + 1` for objective
+- **Number Array**: `questSlot * 10 + offset` for various metadata
 
 These formulas are based on the ToDoList's internal structure and may require adjustment.
 
@@ -124,7 +124,7 @@ FFXIV's ToDoList supports a maximum of 10 quests total (native + custom). The im
 Custom quests are always appended after native FFXIV quests. If there are already 10 native quests, no custom quests will be injected.
 
 ### Index Formula Accuracy
-The indexing formulas (`questIndex * 3`, `questIndex * 10`) are based on observations and may need refinement if:
+The indexing formulas (`questSlot * 3`, `questSlot * 10`) are based on observations and may need refinement if:
 - Quests appear in wrong positions
 - Quest data displays incorrectly
 - Native quests are overwritten
