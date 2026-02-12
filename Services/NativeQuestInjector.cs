@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using System.Text;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Arrays;
@@ -15,7 +13,6 @@ public unsafe class NativeQuestInjector : IDisposable
 {
     private readonly Plugin Plugin;
     private readonly QuestManager QuestManager;
-    private readonly List<IntPtr> AllocatedStrings = new();
     private bool IsDisposed = false;
 
     private const int SocialQuestIcon = 61412;
@@ -54,11 +51,14 @@ public unsafe class NativeQuestInjector : IDisposable
             var stringArray = AtkStage.Instance()->GetStringArrayData(StringArrayType.ToDoList);
             if (stringArray == null) return;
 
-            var numberArray = ToDoListNumberArray.Instance();
+            // Get number array using the proper method
+            var numberArray = AtkStage.Instance()->GetNumberArrayData(NumberArrayType.ToDoList);
             if (numberArray == null) return;
+            
+            var todoNumberArray = (ToDoListNumberArray*)numberArray->IntArray;
 
-            // Get the current number of native quests
-            var nativeQuestCount = numberArray->IntArray[0];
+            // Get the current number of native quests from the correct field
+            var nativeQuestCount = todoNumberArray->QuestCount;
 
             // Calculate how many custom quests we can inject (max 10 total)
             var maxQuests = 10;
@@ -66,9 +66,6 @@ public unsafe class NativeQuestInjector : IDisposable
             var questsToInject = Math.Min(activeQuests.Count, availableSlots);
 
             if (questsToInject <= 0) return;
-
-            // Free previously allocated strings
-            FreeAllocatedStrings();
 
             // Starting index for custom quests (after native quests)
             var startIndex = nativeQuestCount;
@@ -78,7 +75,7 @@ public unsafe class NativeQuestInjector : IDisposable
             for (int i = 0; i < questsToInject; i++)
             {
                 var quest = activeQuests[i];
-                var questIndex = startIndex + i;
+                var questSlot = startIndex + i;
 
                 // Build objective string with progress
                 var objectiveText = $"{quest.Description} ({quest.CurrentCount}/{quest.GoalCount})";
@@ -86,30 +83,32 @@ public unsafe class NativeQuestInjector : IDisposable
                 // Set quest icon based on type
                 int iconId = GetQuestIcon(quest.Type);
 
-                // Set quest title in string array
-                // Using managed=true so the game allocates memory
-                stringArray->SetValue(questIndex * 3, quest.Title, false, true, false);
+                // Set quest title in string array (index = questSlot * 3)
+                stringArray->SetValue(questSlot * 3, quest.Title, false, true, false);
                 
-                // Set quest objective in string array
-                stringArray->SetValue(questIndex * 3 + 1, objectiveText, false, true, false);
+                // Set quest objective in string array (index = questSlot * 3 + 1)
+                stringArray->SetValue(questSlot * 3 + 1, objectiveText, false, true, false);
 
-                // Set quest icon ID in number array
-                numberArray->IntArray[questIndex * 10 + 1] = iconId;
+                // Set quest icon using the correct field
+                todoNumberArray->QuestTypeIcon[questSlot] = iconId;
                 
                 // Set objective count
-                numberArray->IntArray[questIndex * 10 + 2] = 1;
+                todoNumberArray->ObjectiveCountForQuest[questSlot] = 1;
                 
                 // Set current progress
-                numberArray->IntArray[questIndex * 10 + 3] = quest.CurrentCount;
+                todoNumberArray->ObjectiveProgress[questSlot] = quest.CurrentCount;
                 
-                // Set goal count
-                numberArray->IntArray[questIndex * 10 + 4] = quest.GoalCount;
+                // Set button count
+                todoNumberArray->ButtonCountForQuest[questSlot] = 0;
 
                 injectedCount++;
             }
 
-            // Update total quest count in the number array (native + custom)
-            numberArray->IntArray[0] = nativeQuestCount + injectedCount;
+            // Update total quest count
+            todoNumberArray->QuestCount = nativeQuestCount + injectedCount;
+            
+            // Enable quest list
+            todoNumberArray->QuestListEnabled = true;
 
             Plugin.PluginLog.Info($"Injected {injectedCount} custom quests into native ToDoList (after {nativeQuestCount} native quests)");
         }
@@ -117,24 +116,6 @@ public unsafe class NativeQuestInjector : IDisposable
         {
             Plugin.PluginLog.Error($"Failed to inject quests: {ex}");
         }
-    }
-
-    private IntPtr AllocateString(string text)
-    {
-        var bytes = Encoding.UTF8.GetBytes(text + "\0");
-        var ptr = Marshal.AllocHGlobal(bytes.Length);
-        Marshal.Copy(bytes, 0, ptr, bytes.Length);
-        AllocatedStrings.Add(ptr);
-        return ptr;
-    }
-
-    private void FreeAllocatedStrings()
-    {
-        foreach (var ptr in AllocatedStrings)
-        {
-            Marshal.FreeHGlobal(ptr);
-        }
-        AllocatedStrings.Clear();
     }
 
     private int GetQuestIcon(QuestType type)
@@ -153,6 +134,5 @@ public unsafe class NativeQuestInjector : IDisposable
         if (IsDisposed) return;
         IsDisposed = true;
         Plugin.PluginInterface.UiBuilder.Draw -= OnUpdate;
-        FreeAllocatedStrings();
     }
 }
