@@ -247,10 +247,10 @@ The plugin requires Dalamud libraries which are only available in the FFXIV runt
 ### Updated to Stub (1 file):
 1. `Services/NativeQuestInjector.cs` - Converted to documented stub for future implementation reference
 
-### Total Changes:
-- 800+ lines added
-- 10+ lines modified
-- 11 files changed
+### Total Changes (This PR):
+- ~160 lines added (QuestTrackerWindow implementation)
+- ~20 lines modified (Plugin.cs, documentation updates)
+- 5 files changed
 
 ## Security Considerations
 

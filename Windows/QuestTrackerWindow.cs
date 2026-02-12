@@ -19,6 +19,13 @@ public class QuestTrackerWindow : Window, IDisposable
     private static readonly Vector4 InProgressCyan = new(0.0f, 0.81f, 0.82f, 1.0f);
     private static readonly Vector4 NotStartedGray = new(0.5f, 0.5f, 0.5f, 1.0f);
     
+    // Layout constants
+    private const float WindowOffsetFromRight = 350f;
+    private const float WindowTopPosition = 100f;
+    private const float QuestDetailsIndentSize = 20f;
+    private const float ProgressBarWidth = 260f;
+    private const float ProgressBarHeight = 3f;
+    
     private bool _positionInitialized = false;
 
     public QuestTrackerWindow(Plugin plugin, QuestManager questManager) 
@@ -44,7 +51,7 @@ public class QuestTrackerWindow : Window, IDisposable
         // Initialize position on first draw when ImGui context is available
         if (!_positionInitialized)
         {
-            Position = new Vector2(ImGui.GetIO().DisplaySize.X - 350, 100);
+            Position = new Vector2(ImGui.GetIO().DisplaySize.X - WindowOffsetFromRight, WindowTopPosition);
             _positionInitialized = true;
         }
         
@@ -98,7 +105,7 @@ public class QuestTrackerWindow : Window, IDisposable
         ImGui.TextColored(FFXIVGold, quest.Title);
 
         // Indent for quest details
-        ImGui.Indent(20);
+        ImGui.Indent(QuestDetailsIndentSize);
 
         // Draw description with arrow
         ImGui.TextColored(FFXIVCyan, $"► {quest.Description}");
@@ -120,10 +127,10 @@ public class QuestTrackerWindow : Window, IDisposable
             progressColor = NotStartedGray;
 
         ImGui.PushStyleColor(ImGuiCol.PlotHistogram, progressColor);
-        ImGui.ProgressBar(progress, new Vector2(260, 3), string.Empty);
+        ImGui.ProgressBar(progress, new Vector2(ProgressBarWidth, ProgressBarHeight), string.Empty);
         ImGui.PopStyleColor();
 
-        ImGui.Unindent(20);
+        ImGui.Unindent(QuestDetailsIndentSize);
     }
 
     public override void OnClose()

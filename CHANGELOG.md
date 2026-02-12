@@ -175,7 +175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Files Created
 1. `Data/QuestLoader.cs` - JSON quest loading utilities (73 lines)
 2. `Services/QuestNotificationService.cs` - Login notification handler (58 lines)
-3. `Windows/QuestTrackerWindow.cs` - FFXIV-styled quest tracker overlay (128 lines)
+3. `Windows/QuestTrackerWindow.cs` - FFXIV-styled quest tracker overlay (147 lines)
 4. `Quests.json` - Example quest data file (24 lines)
 5. `IMPLEMENTATION_SUMMARY.md` - Implementation documentation (282 lines)
 6. `UI_GUIDE.md` - UI design guide (215 lines)
