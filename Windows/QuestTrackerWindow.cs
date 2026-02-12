@@ -116,6 +116,8 @@ public class QuestTrackerWindow : Window
         var iconWidth = this.CustomQuestIcon != null ? IconSize : 12f;
         var textRightEdge = rightEdge - iconWidth - IconGap;
         var maxTextWidth = MathF.Max(60f, textRightEdge - leftEdge);
+        var objectiveRightEdge = textRightEdge - 10f;
+        var maxObjectiveWidth = MathF.Max(50f, objectiveRightEdge - leftEdge);
 
         const float titleScale = 1.10f;
         const float bodyScale = 1.00f;
@@ -137,11 +139,11 @@ public class QuestTrackerWindow : Window
 
         y += 3f;
         var objectiveWithProgress = $"{objectiveText} {quest.CurrentCount}/{quest.GoalCount}";
-        var objectiveLines = this.WrapToWidth(objectiveWithProgress, maxTextWidth, bodyScale);
+        var objectiveLines = this.WrapToWidth(objectiveWithProgress, maxObjectiveWidth, bodyScale);
         var firstObjectiveY = y;
         foreach (var line in objectiveLines)
         {
-            var pos = this.SetCursorForRightAlignedText(line, textRightEdge, y, bodyScale);
+            var pos = this.SetCursorForRightAlignedText(line, objectiveRightEdge, y, bodyScale);
             this.DrawHaloText(line, this.BodyHaloColor, pos, bodyScale);
             y += ImGui.GetTextLineHeight() * bodyScale;
         }

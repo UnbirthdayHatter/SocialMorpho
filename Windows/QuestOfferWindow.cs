@@ -68,27 +68,24 @@ public class QuestOfferWindow : Window, IDisposable
         var frameEnd = frameStart + frameSize;
         var drawList = ImGui.GetWindowDrawList();
 
-        // Draw the quest window frame first.
-        var frameDrawn = false;
-        if (this.frameImage != null &&
-            this.TryDrawTexture(this.frameImage, frameStart, frameEnd))
+        // Draw the content image first so the frame sits on top of it.
+        if (this.offerImage != null)
         {
-            frameDrawn = true;
+            var contentStart = frameStart + new Vector2(frameSize.X * 0.104f, frameSize.Y * 0.274f);
+            var contentEnd = frameStart + new Vector2(frameSize.X * 0.896f, frameSize.Y * 0.514f);
+            this.TryDrawTexture(this.offerImage, contentStart, contentEnd);
         }
+
+        // Draw the quest window frame over the image.
+        var frameDrawn = false;
+        if (this.frameImage != null && this.TryDrawTexture(this.frameImage, frameStart, frameEnd))
+            frameDrawn = true;
 
         if (!frameDrawn)
         {
             ImGui.TextColored(new Vector4(1f, 0.6f, 0.6f, 1f), $"Frame image not available: {this.loadedFrameImagePath ?? "<unset>"}");
             ImGui.Dummy(new Vector2(1f, 20f));
             return;
-        }
-
-        // Draw the content image in the transparent top slot of the frame.
-        if (this.offerImage != null)
-        {
-            var contentStart = frameStart + new Vector2(frameSize.X * 0.103f, frameSize.Y * 0.294f);
-            var contentEnd = frameStart + new Vector2(frameSize.X * 0.897f, frameSize.Y * 0.541f);
-            this.TryDrawTexture(this.offerImage, contentStart, contentEnd);
         }
 
         // Overlay title, text and buttons aligned to the frame's designed content areas.
@@ -124,11 +121,11 @@ public class QuestOfferWindow : Window, IDisposable
             y += textLineHeight;
         }
 
-        var buttonY = frameStart.Y + (frameSize.Y * 0.888f);
-        var buttonWidth = frameSize.X * 0.27f;
-        var buttonHeight = frameSize.Y * 0.070f;
+        var buttonY = frameStart.Y + (frameSize.Y * 0.878f);
+        var buttonWidth = frameSize.X * 0.31f;
+        var buttonHeight = frameSize.Y * 0.078f;
         var buttonGap = frameSize.X * 0.12f;
-        var leftButtonX = frameStart.X + (frameSize.X * 0.17f);
+        var leftButtonX = frameStart.X + (frameSize.X * 0.135f);
         var rightButtonX = leftButtonX + buttonWidth + buttonGap;
 
         ImGui.SetCursorScreenPos(new Vector2(leftButtonX, buttonY));
