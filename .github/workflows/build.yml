@@ -53,12 +53,12 @@ jobs:
           exit 1
         }
         
-        # Verify Dalamud.Bindings.ImGui.dll exists
-        $imguiBindingsDll = Join-Path $dalamudPath "Dalamud.Bindings.ImGui.dll"
+        # Verify ImGui.NET.dll exists
+        $imguiBindingsDll = Join-Path $dalamudPath "ImGui.NET.dll"
         if (Test-Path $imguiBindingsDll) {
-          Write-Host "✅ Dalamud.Bindings.ImGui.dll found at: $imguiBindingsDll"
+          Write-Host "✅ ImGui.NET.dll found at: $imguiBindingsDll"
         } else {
-          Write-Error "❌ Dalamud.Bindings.ImGui.dll not found!"
+          Write-Error "❌ ImGui.NET.dll not found!"
           exit 1
         }
     
