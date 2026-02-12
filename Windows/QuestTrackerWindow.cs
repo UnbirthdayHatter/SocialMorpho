@@ -91,9 +91,21 @@ public class QuestTrackerWindow : Window
         if (this.TryExtractImGuiHandle(textureObject, out textureHandle))
             return true;
 
-        // ISharedImmediateTexture path in newer Dalamud.
+        // ISharedImmediateTexture path in newer Dalamud: TryGetWrap(out wrap, out ex)
         try
         {
+            var tryGetWrap = textureObject.GetType().GetMethod("TryGetWrap", BindingFlags.Public | BindingFlags.Instance);
+            if (tryGetWrap != null)
+            {
+                var args = new object?[] { null, null };
+                var ok = tryGetWrap.Invoke(textureObject, args);
+                var wrapped = args[0];
+                if (ok is bool success && success && wrapped != null && this.TryExtractImGuiHandle(wrapped, out textureHandle))
+                {
+                    return true;
+                }
+            }
+
             var getWrapOrEmpty = textureObject.GetType().GetMethod("GetWrapOrEmpty", Type.EmptyTypes);
             if (getWrapOrEmpty != null)
             {
@@ -115,7 +127,7 @@ public class QuestTrackerWindow : Window
     private bool TryExtractImGuiHandle(object textureObject, out ImTextureID textureHandle)
     {
         var handleProperties = textureObject.GetType()
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
             .Where(p => p.Name.Contains("Handle", StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
@@ -125,6 +137,36 @@ public class QuestTrackerWindow : Window
             try
             {
                 value = property.GetValue(textureObject);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (TryCreateTextureIdFromValue(value, out var id))
+            {
+                textureHandle = id;
+                return true;
+            }
+        }
+
+        // Some wrappers expose Handle only via interface (explicit implementation).
+        foreach (var iface in textureObject.GetType().GetInterfaces())
+        {
+            if (!iface.Name.Contains("TextureWrap", StringComparison.OrdinalIgnoreCase) &&
+                !iface.Name.Contains("DrawList", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var handleProp = iface.GetProperty("Handle", BindingFlags.Public | BindingFlags.Instance);
+            if (handleProp == null)
+                continue;
+
+            object? value;
+            try
+            {
+                value = handleProp.GetValue(textureObject);
             }
             catch
             {
@@ -298,6 +340,15 @@ public class QuestTrackerWindow : Window
 
     private void DrawCustomIconAt(float x, float y)
     {
+        if (!this.HasCustomQuestIcon && this.CustomQuestIcon != null)
+        {
+            if (this.TryExtractIconHandle(this.CustomQuestIcon, out var lazyHandle))
+            {
+                this.CustomQuestIconHandle = lazyHandle;
+                this.HasCustomQuestIcon = true;
+            }
+        }
+
         ImGui.SetCursorScreenPos(new Vector2(x, y));
         if (this.HasCustomQuestIcon)
         {
