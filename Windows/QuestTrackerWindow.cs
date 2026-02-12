@@ -10,9 +10,9 @@ namespace SocialMorpho.Windows;
 
 public class QuestTrackerWindow : Window
 {
-    private const float IconSize = 26f;
-    private const float IconGap = 10f;
-    private const float RightPadding = 18f;
+    private const float IconSize = 32f;
+    private const float IconGap = 12f;
+    private const float RightPadding = 20f;
 
     private readonly Plugin Plugin;
     private readonly QuestManager QuestManager;
@@ -114,21 +114,22 @@ public class QuestTrackerWindow : Window
         var rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X - RightPadding;
         var iconWidth = this.CustomQuestIcon != null ? IconSize : 12f;
         var lineHeight = ImGui.GetTextLineHeight();
+        var textRightLimit = rightEdge - iconWidth - IconGap - 6f;
         var titleY = baseCursor.Y;
-        var objectiveY = titleY + lineHeight + 2f;
+        var objectiveY = titleY + MathF.Max(lineHeight + 2f, IconSize + 3f);
         var progressY = objectiveY + lineHeight + 1f;
         var nextEntryY = progressY + lineHeight + 6f;
 
-        const float titleScale = 1.16f;
-        var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - IconGap - 4f, titleY, titleScale);
+        const float titleScale = 1.24f;
+        var titlePos = this.SetCursorForRightAlignedText(quest.Title, textRightLimit, titleY, titleScale);
         this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos, titleScale, bold: true);
         this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
 
-        var objectivePos = this.SetCursorForRightAlignedText(objectiveText, rightEdge, objectiveY);
+        var objectivePos = this.SetCursorForRightAlignedText(objectiveText, textRightLimit, objectiveY);
         this.DrawHaloText(objectiveText, this.FFXIVBlue, objectivePos);
 
         var progressText = $"{quest.CurrentCount}/{quest.GoalCount}";
-        var progressPos = this.SetCursorForRightAlignedText(progressText, rightEdge, progressY);
+        var progressPos = this.SetCursorForRightAlignedText(progressText, textRightLimit, progressY);
         this.DrawHaloText(progressText, this.FFXIVBlue, progressPos);
 
         ImGui.SetCursorScreenPos(new Vector2(baseCursor.X, nextEntryY));
