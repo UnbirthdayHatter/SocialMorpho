@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Arrays;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using SocialMorpho.Data;
@@ -44,74 +45,78 @@ public unsafe class NativeQuestInjector : IDisposable
 
     private void InjectCustomQuests()
     {
-        var raptureAtkModule = RaptureAtkModule.Instance();
-        if (raptureAtkModule == null) return;
-
-        var activeQuests = QuestManager.GetActiveQuests();
-        if (activeQuests.Count == 0) return;
-
-        // Access the ToDoList addon
-        var addon = (AddonToDoList*)Plugin.PluginInterface.UiBuilder.GetAddonByName("_ToDoList");
-        if (addon == null || !addon->AtkUnitBase.IsVisible) return;
-
-        // Get the string and number arrays for ToDoList
-        // These array IDs are specific to the ToDoList addon
-        var stringArrayData = raptureAtkModule->GetStringArrayData(72); // ToDoList string array
-        var numberArrayData = raptureAtkModule->GetNumberArrayData(73); // ToDoList number array
-        
-        if (stringArrayData == null || numberArrayData == null) return;
-
-        // Get the current number of native quests
-        // The first element in the number array typically contains metadata about the list
-        var nativeQuestCount = numberArrayData->IntArray[0];
-
-        // Calculate how many custom quests we can inject (max 10 total)
-        var maxQuests = 10;
-        var availableSlots = maxQuests - nativeQuestCount;
-        var questsToInject = Math.Min(activeQuests.Count, availableSlots);
-
-        if (questsToInject <= 0) return;
-
-        // Starting index for custom quests (after native quests)
-        var startIndex = nativeQuestCount;
-
-        // Inject each custom quest
-        for (int i = 0; i < questsToInject; i++)
+        try
         {
-            var quest = activeQuests[i];
-            var questIndex = startIndex + i;
+            var activeQuests = QuestManager.GetActiveQuests();
+            if (activeQuests.Count == 0) return;
 
-            // Build quest title string
-            var title = quest.Title;
-            
-            // Build objective string with progress
-            var objectiveText = $"{quest.Description} ({quest.CurrentCount}/{quest.GoalCount})";
+            // Access FFXIV's ToDoList arrays using the modern approach
+            var stringArray = AtkStage.Instance()->GetStringArrayData(StringArrayType.ToDoList);
+            if (stringArray == null) return;
 
-            // Get quest icon based on type
-            var iconId = GetQuestIcon(quest.Type);
+            var numberArray = ToDoListNumberArray.Instance();
+            if (numberArray == null) return;
 
-            // Set quest title in string array (title index)
-            // Using managed=true so the game allocates memory and we don't need to track it
-            stringArrayData->SetValue(questIndex * 3, title, false, true, false);
-            
-            // Set quest objective in string array (objective index)
-            stringArrayData->SetValue(questIndex * 3 + 1, objectiveText, false, true, false);
+            // Get the current number of native quests
+            var nativeQuestCount = numberArray->IntArray[0];
 
-            // Set quest icon ID in number array
-            numberArrayData->IntArray[questIndex * 10 + 1] = iconId;
-            
-            // Set objective count
-            numberArrayData->IntArray[questIndex * 10 + 2] = 1;
-            
-            // Set current progress
-            numberArrayData->IntArray[questIndex * 10 + 3] = quest.CurrentCount;
-            
-            // Set goal count
-            numberArrayData->IntArray[questIndex * 10 + 4] = quest.GoalCount;
+            // Calculate how many custom quests we can inject (max 10 total)
+            var maxQuests = 10;
+            var availableSlots = maxQuests - nativeQuestCount;
+            var questsToInject = Math.Min(activeQuests.Count, availableSlots);
+
+            if (questsToInject <= 0) return;
+
+            // Free previously allocated strings
+            FreeAllocatedStrings();
+
+            // Starting index for custom quests (after native quests)
+            var startIndex = nativeQuestCount;
+
+            // Inject each active quest
+            int injectedCount = 0;
+            for (int i = 0; i < questsToInject; i++)
+            {
+                var quest = activeQuests[i];
+                var questIndex = startIndex + i;
+
+                // Build objective string with progress
+                var objectiveText = $"{quest.Description} ({quest.CurrentCount}/{quest.GoalCount})";
+
+                // Set quest icon based on type
+                int iconId = GetQuestIcon(quest.Type);
+
+                // Set quest title in string array
+                // Using managed=true so the game allocates memory
+                stringArray->SetValue(questIndex * 3, quest.Title, false, true, false);
+                
+                // Set quest objective in string array
+                stringArray->SetValue(questIndex * 3 + 1, objectiveText, false, true, false);
+
+                // Set quest icon ID in number array
+                numberArray->IntArray[questIndex * 10 + 1] = iconId;
+                
+                // Set objective count
+                numberArray->IntArray[questIndex * 10 + 2] = 1;
+                
+                // Set current progress
+                numberArray->IntArray[questIndex * 10 + 3] = quest.CurrentCount;
+                
+                // Set goal count
+                numberArray->IntArray[questIndex * 10 + 4] = quest.GoalCount;
+
+                injectedCount++;
+            }
+
+            // Update total quest count in the number array (native + custom)
+            numberArray->IntArray[0] = nativeQuestCount + injectedCount;
+
+            Plugin.PluginLog.Info($"Injected {injectedCount} custom quests into native ToDoList (after {nativeQuestCount} native quests)");
         }
-
-        // Update total quest count in the number array
-        numberArrayData->IntArray[0] = nativeQuestCount + questsToInject;
+        catch (Exception ex)
+        {
+            Plugin.PluginLog.Error($"Failed to inject quests: {ex}");
+        }
     }
 
     private IntPtr AllocateString(string text)

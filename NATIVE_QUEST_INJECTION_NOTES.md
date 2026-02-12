@@ -6,12 +6,12 @@ The `NativeQuestInjector.cs` has been fully implemented to inject custom quests 
 ## Implementation Details
 
 ### Core Approach
-1. Access `RaptureAtkModule` instance for UI data manipulation
-2. Get `_ToDoList` addon and verify it's visible
-3. Access `StringArrayData` (ID 72) and `NumberArrayData` (ID 73) for quest data
+1. Access `AtkStage` instance to get string array data using `StringArrayType.ToDoList`
+2. Access `ToDoListNumberArray` instance for quest metadata
+3. Read current native quest count from the number array
 4. Calculate available slots after native quests (max 10 total)
 5. Inject quest data using managed memory allocation
-6. Update quest count to include custom quests
+6. Update total quest count to include custom quests
 
 ### Key Methods
 
@@ -19,12 +19,22 @@ The `NativeQuestInjector.cs` has been fully implemented to inject custom quests 
 - Called every frame via `OnUpdate()` when quest tracker is enabled
 - Performs null checks at each step to prevent crashes
 - Uses early returns for clean error handling
-- Injects quests only when ToDoList addon is visible
+- Respects native FFXIV quests by appending custom quests after them
+
+#### Array Access (Modern Approach)
+```csharp
+// Access string array using StringArrayType enum
+var stringArray = AtkStage.Instance()->GetStringArrayData(StringArrayType.ToDoList);
+
+// Access number array using instance method
+var numberArray = ToDoListNumberArray.Instance();
+```
+This approach is more stable than using hardcoded array IDs (72, 73) as it uses the FFXIVClientStructs enum values.
 
 #### String Injection
 ```csharp
-stringArrayData->SetValue(questIndex * 3, title, false, true, false);
-stringArrayData->SetValue(questIndex * 3 + 1, objectiveText, false, true, false);
+stringArray->SetValue(questIndex * 3, quest.Title, false, true, false);
+stringArray->SetValue(questIndex * 3 + 1, objectiveText, false, true, false);
 ```
 - Uses `managed=true` parameter so game handles memory allocation
 - No manual memory tracking needed for strings
@@ -32,21 +42,21 @@ stringArrayData->SetValue(questIndex * 3 + 1, objectiveText, false, true, false)
 
 #### Number Array Updates
 ```csharp
-numberArrayData->IntArray[questIndex * 10 + 1] = iconId;
-numberArrayData->IntArray[questIndex * 10 + 2] = 1;
-numberArrayData->IntArray[questIndex * 10 + 3] = quest.CurrentCount;
-numberArrayData->IntArray[questIndex * 10 + 4] = quest.GoalCount;
+numberArray->IntArray[questIndex * 10 + 1] = iconId;
+numberArray->IntArray[questIndex * 10 + 2] = 1;
+numberArray->IntArray[questIndex * 10 + 3] = quest.CurrentCount;
+numberArray->IntArray[questIndex * 10 + 4] = quest.GoalCount;
 ```
 - Each quest uses multiple integer slots for metadata
 - Stores icon ID, objective count, current progress, and goal count
 
 ## Important Configuration Values
 
-### Array IDs
-- **StringArrayData ID: 72** - May need adjustment based on game version
-- **NumberArrayData ID: 73** - May need adjustment based on game version
+### Array Access Methods
+- **StringArrayData**: Accessed via `AtkStage.Instance()->GetStringArrayData(StringArrayType.ToDoList)`
+- **NumberArrayData**: Accessed via `ToDoListNumberArray.Instance()`
 
-These IDs are game-version specific and might need to be updated after FFXIV patches.
+These use FFXIVClientStructs enum types and are more version-stable than hardcoded IDs.
 
 ### Array Indexing
 - **String Array**: `questIndex * 3` for title, `questIndex * 3 + 1` for objective
@@ -69,19 +79,19 @@ The implementation uses `SetValue(managed=true)` which:
 - Allows immediate pointer disposal after call
 
 ### Legacy Methods Kept
-`AllocateString()` and `FreeAllocatedStrings()` methods are retained but not used in the current implementation. They may be useful for future enhancements.
+`AllocateString()` and `FreeAllocatedStrings()` methods are retained for potential future use or alternative allocation strategies.
 
 ## Error Handling
 
 ### Safety Checks
-1. RaptureAtkModule instance check
-2. Active quests availability check
-3. Addon existence and visibility check
-4. String/Number array null checks
+1. Active quests availability check
+2. AtkStage instance and string array null check
+3. ToDoListNumberArray instance null check
+4. Native quest count retrieval
 5. Available slot calculation
 
 ### Exception Handling
-All injection attempts are wrapped in try-catch in `OnUpdate()`:
+All injection attempts are wrapped in try-catch in both `OnUpdate()` and `InjectCustomQuests()`:
 ```csharp
 try
 {
@@ -96,16 +106,10 @@ catch (Exception ex)
 ## Limitations and Known Issues
 
 ### 10 Quest Maximum
-FFXIV's ToDoList supports a maximum of 10 quests total (native + custom). The implementation respects this limit.
+FFXIV's ToDoList supports a maximum of 10 quests total (native + custom). The implementation respects this limit by calculating available slots.
 
-### Visibility Requirement
-Quest injection only occurs when the ToDoList addon is visible. If the player hides their quest tracker, custom quests won't be injected.
-
-### Array ID Stability
-The array IDs (72, 73) are reverse-engineered values and may change with game updates. Monitor for:
-- Quest tracker not updating
-- Game crashes related to UI
-- Errors in Dalamud logs about array access
+### Native Quest Preservation
+Custom quests are always appended after native FFXIV quests. If there are already 10 native quests, no custom quests will be injected.
 
 ### Index Formula Accuracy
 The indexing formulas (`questIndex * 3`, `questIndex * 10`) are based on observations and may need refinement if:
@@ -128,7 +132,7 @@ Since this code interacts with FFXIV's native UI, it must be tested in-game:
    - Test with 0 custom quests (should do nothing)
    - Test with 10+ custom quests (should limit to available slots)
    - Test with native FFXIV quests present
-   - Test hiding/showing ToDoList addon
+   - Test with 10 native quests (no room for custom)
 
 3. **Memory Safety**
    - Monitor for memory leaks over extended play sessions
@@ -144,27 +148,26 @@ Since this code interacts with FFXIV's native UI, it must be tested in-game:
 ## Future Enhancements
 
 ### Potential Improvements
-1. **Dynamic Array ID Detection** - Auto-detect correct array IDs
-2. **Better Index Calculation** - Analyze ToDoList structure for exact formulas
-3. **Custom Quest Ordering** - Allow user-defined quest priority
-4. **Quest Categories** - Group quests by type in the tracker
-5. **Conditional Display** - Show/hide quests based on player state
+1. **Better Index Calculation** - Analyze ToDoList structure for exact formulas
+2. **Custom Quest Ordering** - Allow user-defined quest priority
+3. **Quest Categories** - Group quests by type in the tracker
+4. **Conditional Display** - Show/hide quests based on player state
 
 ### Performance Optimization
-- Cache addon pointer between frames if stable
-- Only update when quest data changes
+- Only update when quest data changes (currently updates every frame)
 - Throttle updates to reduce CPU usage
+- Cache array pointers if stable across frames
 
 ## Troubleshooting
 
 ### Quests Don't Appear
 - Check if ShowQuestTracker is enabled in settings
-- Verify ToDoList addon is visible in-game
+- Verify there are available slots (< 10 total quests)
 - Check Dalamud logs for errors
-- Confirm array IDs are correct for game version
+- Confirm StringArrayType.ToDoList is correct for game version
 
 ### Game Crashes
-- Array IDs may be incorrect for current game version
+- Array access may be invalid for current game version
 - Index formulas may be accessing invalid memory
 - Check for null pointer dereferences in logs
 
@@ -177,13 +180,11 @@ Since this code interacts with FFXIV's native UI, it must be tested in-game:
 
 - [FFXIVClientStructs GitHub](https://github.com/aers/FFXIVClientStructs)
 - [Dalamud Plugin Development Docs](https://dalamud.dev/)
-- [AddonToDoList Structure](https://github.com/aers/FFXIVClientStructs/blob/main/FFXIVClientStructs/FFXIV/Client/UI/AddonToDoList.cs)
-- [StringArrayData Documentation](https://github.com/aers/FFXIVClientStructs/blob/main/FFXIVClientStructs/FFXIV/Component/GUI/StringArrayData.cs)
+- [StringArrayType Enum](https://github.com/aers/FFXIVClientStructs/blob/main/FFXIVClientStructs/FFXIV/Component/GUI/StringArrayType.cs)
+- [ToDoListNumberArray](https://github.com/aers/FFXIVClientStructs/blob/main/FFXIVClientStructs/FFXIV/Client/UI/Misc/ToDoListNumberArray.cs)
+- [NoTypeSay Reference Implementation](https://github.com/aethergel/NoTypeSay/blob/9697ad5fb912b0b11738138350792e8aa5998b62/NoTypeSay/Plugin.cs#L5-L95)
 
 ## Version History
 
-- **Initial Implementation** (2024-02-12): Fully implemented quest injection with managed memory
-- Uses RaptureAtkModule for array access
-- Respects 10-quest limit
-- Handles native quest offset calculation
-- Uses managed string allocation for memory safety
+- **Initial Implementation** (2024-02-12): Implemented using RaptureAtkModule with hardcoded array IDs
+- **Modernized Implementation** (2026-02-12): Updated to use StringArrayType.ToDoList and ToDoListNumberArray.Instance() for better version stability
