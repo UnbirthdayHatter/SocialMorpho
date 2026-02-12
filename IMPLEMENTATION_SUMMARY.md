@@ -34,18 +34,19 @@ This PR implements all core features to make the Social Morpho quest system full
 
 ## New Features Implemented
 
-### 1. Quest Tracker Overlay Window ✅
-**File:** `Windows/QuestTrackerWindow.cs`
+### 1. Native Quest Injection System ✅
+**File:** `Services/NativeQuestInjector.cs`
 
 **Features:**
-- FFXIV-style quest tracker UI positioned in top-right corner
+- Direct manipulation of FFXIV's native `_ToDoList` addon
+- Injects custom quests into `ToDoListStringArray` and `ToDoListNumberArray`
 - Shows only active (incomplete) quests
-- Displays quest title and progress (e.g., "3/5")
-- Color-coded quest types (Social=Blue, Buff=Green, Emote=Orange)
-- Progress bars with color coding (Green=Complete, Yellow=In Progress, Gray=Not Started)
-- Semi-transparent background (70% opacity)
-- Window flags: NoTitleBar, NoResize, AlwaysAutoResize, NoFocusOnAppearing
+- Custom quests appear exactly like native FFXIV quests
+- Memory marshaling for UTF-8 strings in unmanaged memory
+- Quest icons, progress counters, and objectives
+- Proper memory cleanup and disposal
 - Can be toggled via configuration setting
+- Respects 10-quest limit (native + custom combined)
 
 ### 2. JSON Quest Loading System ✅
 **Files:** `Data/QuestLoader.cs`, `Quests.json`
@@ -142,10 +143,10 @@ SocialMorpho/
 │   ├── QuestManager.cs (UPDATED: JSON loading, reset logic, filtering)
 │   └── QuestLoader.cs (NEW: JSON utilities)
 ├── Services/
-│   └── QuestNotificationService.cs (NEW: Login notifications)
+│   ├── QuestNotificationService.cs (NEW: Login notifications)
+│   └── NativeQuestInjector.cs (NEW: Native quest injection)
 ├── Windows/
-│   ├── MainWindow.cs (UPDATED: Complete UI overhaul)
-│   └── QuestTrackerWindow.cs (NEW: Quest tracker overlay)
+│   └── MainWindow.cs (UPDATED: Complete UI overhaul)
 ├── Configuration.cs (UPDATED: New settings)
 ├── Plugin.cs (UPDATED: All fixes + service integration)
 └── Quests.json (NEW: Example quest data)
@@ -229,7 +230,7 @@ The plugin requires Dalamud libraries which are only available in the FFXIV runt
 ### Created (4 files):
 1. `Data/QuestLoader.cs` - JSON loading utilities
 2. `Services/QuestNotificationService.cs` - Login notifications
-3. `Windows/QuestTrackerWindow.cs` - Quest tracker overlay
+3. `Services/NativeQuestInjector.cs` - Native quest injection into FFXIV ToDoList
 4. `Quests.json` - Example quest data
 
 ### Total Changes:
