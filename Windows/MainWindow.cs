@@ -321,6 +321,12 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
         {
             Plugin.Configuration.ShowQuestTracker = showQuestTracker;
             Plugin.Configuration.Save();
+            
+            // Update quest tracker window visibility
+            if (Plugin.QuestTrackerWindow != null)
+            {
+                Plugin.QuestTrackerWindow.IsOpen = showQuestTracker;
+            }
         }
 
         if (ImGui.Checkbox("Auto-show Tracker on Login", ref showQuestTrackerOnLogin))
