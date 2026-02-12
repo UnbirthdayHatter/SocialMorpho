@@ -54,3 +54,71 @@ jobs:
         path: |
           bin/Release/net10.0-windows/*
           !bin/Release/net10.0-windows/*.pdb
+  
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        sparse-checkout: |
+          SocialMorpho.csproj
+    
+    - name: Extract version from csproj
+      id: version
+      shell: bash
+      run: |
+        VERSION=$(grep -oP '<Version>\K[^<]+' SocialMorpho.csproj)
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        echo "Version extracted: ${VERSION}"
+    
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: SocialMorpho
+        path: ./artifacts
+    
+    - name: Create release zip
+      shell: bash
+      run: |
+        cd artifacts
+        # Find the zip file created by DalamudPackager (should be in root of artifacts)
+        if [ -f "latest.zip" ]; then
+          cp latest.zip ../SocialMorpho-v${{ steps.version.outputs.version }}.zip
+          echo "Found latest.zip in artifacts root"
+        elif [ -f "SocialMorpho/latest.zip" ]; then
+          cp SocialMorpho/latest.zip ../SocialMorpho-v${{ steps.version.outputs.version }}.zip
+          echo "Found latest.zip in SocialMorpho subdirectory"
+        else
+          echo "No latest.zip found, listing artifacts:"
+          find . -type f -name "*.zip" || echo "No zip files found"
+          ls -laR
+          exit 1
+        fi
+        cd ..
+        ls -lh SocialMorpho-v${{ steps.version.outputs.version }}.zip
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
+      with:
+        tag_name: v${{ steps.version.outputs.version }}
+        name: Release v${{ steps.version.outputs.version }}
+        body: |
+          ## SocialMorpho v${{ steps.version.outputs.version }}
+          
+          Automatic release created from main branch.
+          
+          ### Installation
+          1. Download the `SocialMorpho-v${{ steps.version.outputs.version }}.zip` file
+          2. Extract to your Dalamud plugins directory
+          3. Enable the plugin in Dalamud
+          
+          See [README.md](https://github.com/UnbirthdayHatter/SocialMorpho/blob/main/README.md) for more information.
+        files: |
+          SocialMorpho-v${{ steps.version.outputs.version }}.zip
+        draft: false
+        prerelease: false
