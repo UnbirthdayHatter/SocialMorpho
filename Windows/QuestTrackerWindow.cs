@@ -6,6 +6,7 @@ using System.Numerics;
 using System.Collections.Generic;
 using System.Linq;
 using System;
+using System.Reflection;
 
 namespace SocialMorpho.Windows;
 
@@ -71,23 +72,46 @@ public class QuestTrackerWindow : Window
                 return;
             }
 
-            var uiBuilderType = Plugin.PluginInterface.UiBuilder.GetType();
+            var uiBuilder = Plugin.PluginInterface.UiBuilder;
+            var uiBuilderType = uiBuilder.GetType();
             var loadImageMethod = uiBuilderType
                 .GetMethods()
                 .FirstOrDefault(m => m.Name == "LoadImage"
                     && m.GetParameters().Length == 1
                     && m.GetParameters()[0].ParameterType == typeof(string));
 
-            if (loadImageMethod == null)
+            object? loaded = null;
+
+            if (loadImageMethod != null)
             {
-                Plugin.PluginLog.Warning($"UiBuilder.LoadImage(string) is not available in this Dalamud version ({uiBuilderType.FullName})");
-                return;
+                loaded = loadImageMethod.Invoke(uiBuilder, new object[] { iconPath });
+            }
+            else
+            {
+                // Fallback: look for extension-style static LoadImage(IUiBuilder, string)
+                var extensionMethod = AppDomain.CurrentDomain.GetAssemblies()
+                    .SelectMany(SafeGetTypes)
+                    .Where(t => t.IsSealed && t.IsAbstract)
+                    .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                    .FirstOrDefault(m =>
+                    {
+                        if (m.Name != "LoadImage") return false;
+                        var p = m.GetParameters();
+                        return p.Length == 2
+                            && p[0].ParameterType.IsAssignableFrom(uiBuilderType)
+                            && p[1].ParameterType == typeof(string);
+                    });
+
+                if (extensionMethod != null)
+                {
+                    loaded = extensionMethod.Invoke(null, new object[] { uiBuilder, iconPath });
+                }
             }
 
-            CustomQuestIcon = loadImageMethod.Invoke(Plugin.PluginInterface.UiBuilder, new object[] { iconPath });
+            CustomQuestIcon = loaded;
             if (CustomQuestIcon == null)
             {
-                Plugin.PluginLog.Warning($"LoadImage returned null for icon path: {iconPath}");
+                Plugin.PluginLog.Warning($"Unable to load custom icon. UiBuilder type: {uiBuilderType.FullName}");
                 return;
             }
 
@@ -138,43 +162,51 @@ public class QuestTrackerWindow : Window
 
     private void DrawQuestEntry(QuestData quest)
     {
-        DrawCustomIcon();
+        var entryStart = ImGui.GetCursorScreenPos();
+        var rightEdge = entryStart.X + ImGui.GetContentRegionAvail().X - 4f;
+        const float iconSize = 20f;
+        const float iconGap = 8f;
 
-        DrawHaloWrappedText(quest.Title, TitleWrapWidth, FFXIVWhite, FFXIVGoldHalo);
+        var titleRightEdge = rightEdge - iconSize - iconGap;
+        var titleHeight = DrawHaloWrappedTextRightAligned(quest.Title, TitleWrapWidth, titleRightEdge, FFXIVWhite, FFXIVGoldHalo);
+        DrawCustomIconAt(rightEdge - iconSize, entryStart.Y, iconSize);
 
-        ImGui.Indent(20f);
+        ImGui.SetCursorScreenPos(new Vector2(entryStart.X, entryStart.Y + MathF.Max(titleHeight, iconSize) + 2f));
         var objectiveText = !string.IsNullOrEmpty(quest.Description)
             ? quest.Description
             : $"Complete {quest.GoalCount} objectives";
         var objectiveLine = $"{objectiveText}  {quest.CurrentCount}/{quest.GoalCount}";
-        DrawHaloWrappedText(objectiveLine, ObjectiveWrapWidth, FFXIVWhite, FFXIVBlueHalo);
-
-        ImGui.Unindent(20f);
+        DrawHaloWrappedTextRightAligned(objectiveLine, ObjectiveWrapWidth, rightEdge, FFXIVWhite, FFXIVBlueHalo);
         ImGui.Spacing();
     }
 
-    private void DrawCustomIcon()
+    private void DrawCustomIconAt(float x, float y, float iconSize)
     {
         if (HasCustomQuestIcon)
         {
-            var pos = ImGui.GetCursorScreenPos();
             var drawList = ImGui.GetWindowDrawList();
+            var pos = new Vector2(x, y);
 
             drawList.AddImage(
                 CustomQuestIconHandle,
                 new Vector2(pos.X + 1, pos.Y + 1),
-                new Vector2(pos.X + 21, pos.Y + 21),
+                new Vector2(pos.X + iconSize + 1, pos.Y + iconSize + 1),
                 Vector2.Zero,
                 Vector2.One,
                 ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.5f))
             );
 
-            ImGui.Image(CustomQuestIconHandle, new Vector2(20, 20));
-            ImGui.SameLine(0f, 6f);
+            drawList.AddImage(
+                CustomQuestIconHandle,
+                pos,
+                new Vector2(pos.X + iconSize, pos.Y + iconSize),
+                Vector2.Zero,
+                Vector2.One
+            );
             return;
         }
 
-        var fallbackPos = ImGui.GetCursorScreenPos();
+        var fallbackPos = new Vector2(x, y);
         var fallbackDrawList = ImGui.GetWindowDrawList();
 
         fallbackDrawList.AddText(
@@ -182,12 +214,14 @@ public class QuestTrackerWindow : Window
             ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.5f)),
             "!"
         );
-
-        ImGui.TextColored(new Vector4(1.0f, 0.84f, 0.0f, 1.0f), "!");
-        ImGui.SameLine(0f, 6f);
+        fallbackDrawList.AddText(
+            fallbackPos,
+            ImGui.ColorConvertFloat4ToU32(new Vector4(1.0f, 0.84f, 0.0f, 1.0f)),
+            "!"
+        );
     }
 
-    private void DrawHaloWrappedText(string text, float wrapWidth, Vector4 textColor, Vector4 haloColor)
+    private float DrawHaloWrappedTextRightAligned(string text, float wrapWidth, float rightEdgeX, Vector4 textColor, Vector4 haloColor)
     {
         var lines = WrapText(text, wrapWidth);
         var drawList = ImGui.GetWindowDrawList();
@@ -198,7 +232,8 @@ public class QuestTrackerWindow : Window
 
         for (int i = 0; i < lines.Count; i++)
         {
-            var linePos = new Vector2(start.X, start.Y + (i * lineHeight));
+            var lineWidth = ImGui.CalcTextSize(lines[i]).X;
+            var linePos = new Vector2(rightEdgeX - lineWidth, start.Y + (i * lineHeight));
             drawList.AddText(new Vector2(linePos.X - 1, linePos.Y), halo, lines[i]);
             drawList.AddText(new Vector2(linePos.X + 1, linePos.Y), halo, lines[i]);
             drawList.AddText(new Vector2(linePos.X, linePos.Y - 1), halo, lines[i]);
@@ -207,6 +242,7 @@ public class QuestTrackerWindow : Window
         }
 
         ImGui.Dummy(new Vector2(wrapWidth, lines.Count * lineHeight));
+        return lines.Count * lineHeight;
     }
 
     private List<string> WrapText(string text, float maxWidth)
@@ -299,5 +335,21 @@ public class QuestTrackerWindow : Window
     {
         if (CustomQuestIcon is IDisposable disposable)
             disposable.Dispose();
+    }
+
+    private static IEnumerable<Type> SafeGetTypes(Assembly assembly)
+    {
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            return ex.Types.Where(t => t != null)!;
+        }
+        catch
+        {
+            return Array.Empty<Type>();
+        }
     }
 }
