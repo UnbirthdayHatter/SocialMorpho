@@ -11,9 +11,6 @@ public class QuestTrackerWindow : Window, IDisposable
     // FFXIV color constants
     private static readonly Vector4 FFXIVGold = new Vector4(0.83f, 0.69f, 0.22f, 1.0f);
     private static readonly Vector4 FFXIVCyan = new Vector4(0.0f, 0.81f, 0.82f, 1.0f);
-    private static readonly Vector4 FFXIVCyanAlpha = new Vector4(0.0f, 0.81f, 0.82f, 0.8f);
-    private static readonly Vector4 BrightGreen = new Vector4(0.3f, 0.9f, 0.3f, 1.0f);
-    private static readonly Vector4 DarkGray = new Vector4(0.4f, 0.4f, 0.4f, 0.6f);
     
     // Quest type indicator colors
     private static readonly Vector4 SocialBlue = new Vector4(0.4f, 0.8f, 1.0f, 1.0f);
@@ -28,7 +25,10 @@ public class QuestTrackerWindow : Window, IDisposable
                ImGuiWindowFlags.NoTitleBar | 
                ImGuiWindowFlags.NoResize | 
                ImGuiWindowFlags.AlwaysAutoResize |
-               ImGuiWindowFlags.NoFocusOnAppearing)
+               ImGuiWindowFlags.NoFocusOnAppearing |
+               ImGuiWindowFlags.NoBackground |
+               ImGuiWindowFlags.NoScrollbar |
+               ImGuiWindowFlags.NoBringToFrontOnFocus)
     {
         Plugin = plugin;
         QuestManager = questManager;
@@ -37,8 +37,8 @@ public class QuestTrackerWindow : Window, IDisposable
         Position = new Vector2(ImGui.GetIO().DisplaySize.X - 350, 50);
         PositionCondition = ImGuiCond.FirstUseEver;
 
-        // Semi-transparent background with FFXIV-style tint
-        BgAlpha = 0.75f;
+        // Fully transparent background for seamless overlay
+        BgAlpha = 0.0f;
 
         // Show by default if configured
         IsOpen = Plugin.Configuration.ShowQuestTracker;
@@ -59,15 +59,6 @@ public class QuestTrackerWindow : Window, IDisposable
             ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1.0f), "No active quests");
             return;
         }
-
-        // FFXIV-style header with golden color
-        ImGui.PushStyleColor(ImGuiCol.Text, FFXIVGold);
-        ImGui.Text("Active Quests");
-        ImGui.PopStyleColor();
-        
-        ImGui.Separator();
-        ImGui.Spacing();
-        ImGui.Spacing(); // Extra spacing for FFXIV style
 
         foreach (var quest in activeQuests)
         {
@@ -105,15 +96,6 @@ public class QuestTrackerWindow : Window, IDisposable
         ImGui.Text($" ({quest.CurrentCount}/{quest.GoalCount})");
         ImGui.PopStyleColor();
         ImGui.Unindent(20f);
-
-        // Progress bar (subtle, matching FFXIV style)
-        float progress = quest.GoalCount > 0 ? (float)quest.CurrentCount / quest.GoalCount : 0f;
-        var progressColor = GetProgressColor(progress);
-        ImGui.Indent(20f);
-        ImGui.PushStyleColor(ImGuiCol.PlotHistogram, progressColor);
-        ImGui.ProgressBar(progress, new Vector2(260, 3), string.Empty);
-        ImGui.PopStyleColor();
-        ImGui.Unindent(20f);
     }
 
     private string GetQuestTypeSymbol(QuestType type)
@@ -138,16 +120,6 @@ public class QuestTrackerWindow : Window, IDisposable
             QuestType.Custom => FFXIVGold,
             _ => new Vector4(1.0f, 1.0f, 1.0f, 1.0f)
         };
-    }
-
-    private Vector4 GetProgressColor(float progress)
-    {
-        if (progress >= 1.0f)
-            return BrightGreen;  // Complete
-        else if (progress > 0f)
-            return FFXIVCyanAlpha;  // In progress (FFXIV style)
-        else
-            return DarkGray;  // Not started
     }
 
     public void Dispose()
