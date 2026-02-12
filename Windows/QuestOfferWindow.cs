@@ -4,6 +4,7 @@ using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Windowing;
 using SocialMorpho.Data;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 
 namespace SocialMorpho.Windows;
@@ -62,10 +63,8 @@ public class QuestOfferWindow : Window, IDisposable
         // Draw the quest window frame first.
         var frameDrawn = false;
         if (this.frameImage != null &&
-            this.frameImage.TryGetWrap(out var frameWrap, out _) &&
-            frameWrap is IDrawListTextureWrap frameDrawWrap)
+            this.TryDrawTexture(this.frameImage, frameStart, frameEnd))
         {
-            frameDrawWrap.Draw(drawList, frameStart, frameEnd);
             frameDrawn = true;
         }
 
@@ -77,13 +76,11 @@ public class QuestOfferWindow : Window, IDisposable
         }
 
         // Draw the content image in the transparent top slot of the frame.
-        if (this.offerImage != null &&
-            this.offerImage.TryGetWrap(out var offerWrap, out _) &&
-            offerWrap is IDrawListTextureWrap offerDrawWrap)
+        if (this.offerImage != null)
         {
             var contentStart = frameStart + new Vector2(frameSize.X * 0.132f, frameSize.Y * 0.306f);
             var contentEnd = frameStart + new Vector2(frameSize.X * 0.867f, frameSize.Y * 0.538f);
-            offerDrawWrap.Draw(drawList, contentStart, contentEnd);
+            this.TryDrawTexture(this.offerImage, contentStart, contentEnd);
         }
 
         // Overlay title, text and buttons aligned to the frame's designed content areas.
@@ -182,6 +179,108 @@ public class QuestOfferWindow : Window, IDisposable
         {
             this.plugin.PluginLog.Error($"Failed to load quest offer image: {ex.Message}");
         }
+    }
+
+    private bool TryDrawTexture(ISharedImmediateTexture texture, Vector2 topLeft, Vector2 bottomRight)
+    {
+        if (texture.TryGetWrap(out var wrap, out _) && wrap is IDrawListTextureWrap drawListWrap)
+        {
+            drawListWrap.Draw(ImGui.GetWindowDrawList(), topLeft, bottomRight);
+            return true;
+        }
+
+        if (texture.TryGetWrap(out var wrapForHandle, out _) && TryGetImGuiTextureFromWrap(wrapForHandle, out var textureId))
+        {
+            ImGui.SetCursorScreenPos(topLeft);
+            ImGui.Image(textureId, new Vector2(bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y));
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetImGuiTextureFromWrap(IDalamudTextureWrap wrap, out ImTextureID textureId)
+    {
+        try
+        {
+            var handleValue = wrap.GetType().GetProperty("Handle")?.GetValue(wrap);
+            if (TryCreateTextureIdFromValue(handleValue, out var id))
+            {
+                textureId = id;
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        textureId = default;
+        return false;
+    }
+
+    private static bool TryCreateTextureIdFromValue(object? value, out ImTextureID textureId)
+    {
+        if (value is ImTextureID direct)
+        {
+            textureId = direct;
+            return true;
+        }
+
+        if (value == null)
+        {
+            textureId = default;
+            return false;
+        }
+
+        var textureType = typeof(ImTextureID);
+        var valueType = value.GetType();
+
+        var operators = textureType.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+            .Where(m =>
+                (m.Name == "op_Implicit" || m.Name == "op_Explicit") &&
+                m.ReturnType == textureType &&
+                m.GetParameters().Length == 1);
+        foreach (var op in operators)
+        {
+            var paramType = op.GetParameters()[0].ParameterType;
+            try
+            {
+                var arg = paramType.IsAssignableFrom(valueType) ? value : Convert.ChangeType(value, paramType);
+                var result = op.Invoke(null, new[] { arg });
+                if (result is ImTextureID converted)
+                {
+                    textureId = converted;
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        foreach (var ctor in textureType.GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+        {
+            var p = ctor.GetParameters();
+            if (p.Length != 1)
+                continue;
+
+            try
+            {
+                var arg = p[0].ParameterType.IsAssignableFrom(valueType) ? value : Convert.ChangeType(value, p[0].ParameterType);
+                var created = ctor.Invoke(new[] { arg });
+                if (created is ImTextureID typed)
+                {
+                    textureId = typed;
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        textureId = default;
+        return false;
     }
 
     private void CloseOffer()
