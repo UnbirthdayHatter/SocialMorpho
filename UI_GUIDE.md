@@ -128,6 +128,8 @@ When clicking "Details" button:
 
 ## Quest Tracker Overlay
 
+**Implementation:** ImGui overlay window (not injected into FFXIV's native quest system)
+
 Positioned in top-right corner of screen with FFXIV-native styling:
 
 ```
