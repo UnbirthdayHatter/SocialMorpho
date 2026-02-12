@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SocialMorpho.Windows;
@@ -20,7 +21,7 @@ public class QuestTrackerWindow : Window
     // Tuned to match requested FFXIV-like tones.
     private readonly Vector4 FFXIVGold = new(0.7137f, 0.6196f, 0.3765f, 1.0f); // #b69e60
     private readonly Vector4 FFXIVBlue = new(0.3059f, 0.5765f, 0.6941f, 1.0f); // #4e93b1
-    private readonly Vector4 GlowColor = new(0f, 0f, 0f, 0.70f);
+    private readonly Vector4 WhiteText = new(1.0f, 1.0f, 1.0f, 1.0f);
 
     public QuestTrackerWindow(Plugin plugin, QuestManager questManager)
         : base("Quest Tracker##SocialMorphoTracker",
@@ -75,8 +76,7 @@ public class QuestTrackerWindow : Window
                 return;
             }
 
-            var handleProperty = this.CustomQuestIcon.GetType().GetProperty("ImGuiHandle");
-            if (handleProperty?.GetValue(this.CustomQuestIcon) is ImTextureID textureHandle)
+            if (this.TryExtractImGuiHandle(this.CustomQuestIcon, out var textureHandle))
             {
                 this.CustomQuestIconHandle = textureHandle;
                 this.HasCustomQuestIcon = true;
@@ -140,6 +140,8 @@ public class QuestTrackerWindow : Window
 
     private object? TryInvokeTextureMethods(object target, string iconPath, List<string> attempts)
     {
+        var iconBytes = File.ReadAllBytes(iconPath);
+
         foreach (var method in target.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance))
         {
             if (!method.Name.Contains("Image", StringComparison.OrdinalIgnoreCase) &&
@@ -149,11 +151,12 @@ public class QuestTrackerWindow : Window
             }
 
             var parameters = method.GetParameters();
-            if (parameters.Length != 1 || parameters[0].ParameterType != typeof(string))
+            var args = BuildLoaderArgs(parameters, iconPath, iconBytes);
+            if (args == null)
                 continue;
 
-            attempts.Add($"{target.GetType().Name}.{method.Name}(string)");
-            var result = TryInvokeMethod(target, method, iconPath);
+            attempts.Add($"{target.GetType().Name}.{method.Name}({string.Join(",", parameters.Select(p => p.ParameterType.Name))})");
+            var result = TryInvokeMethod(target, method, args);
             if (result != null)
                 return result;
         }
@@ -161,11 +164,54 @@ public class QuestTrackerWindow : Window
         return null;
     }
 
-    private static object? TryInvokeMethod(object target, MethodInfo method, string iconPath)
+    private static object?[]? BuildLoaderArgs(ParameterInfo[] parameters, string iconPath, byte[] iconBytes)
+    {
+        var args = new object?[parameters.Length];
+
+        for (var i = 0; i < parameters.Length; i++)
+        {
+            var type = parameters[i].ParameterType;
+            if (type == typeof(string))
+            {
+                args[i] = iconPath;
+                continue;
+            }
+
+            if (type == typeof(byte[]))
+            {
+                args[i] = iconBytes;
+                continue;
+            }
+
+            if (type == typeof(CancellationToken))
+            {
+                args[i] = CancellationToken.None;
+                continue;
+            }
+
+            if (type == typeof(bool))
+            {
+                args[i] = true;
+                continue;
+            }
+
+            if (parameters[i].HasDefaultValue)
+            {
+                args[i] = parameters[i].DefaultValue;
+                continue;
+            }
+
+            return null;
+        }
+
+        return args;
+    }
+
+    private static object? TryInvokeMethod(object target, MethodInfo method, object?[] args)
     {
         try
         {
-            var result = method.Invoke(target, new object[] { iconPath });
+            var result = method.Invoke(target, args);
             if (result == null)
                 return null;
 
@@ -182,6 +228,101 @@ public class QuestTrackerWindow : Window
         {
             return null;
         }
+    }
+
+    private bool TryExtractImGuiHandle(object textureObject, out ImTextureID textureHandle)
+    {
+        var handleProperties = textureObject.GetType()
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.Name.Contains("Handle", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        foreach (var property in handleProperties)
+        {
+            object? value;
+            try
+            {
+                value = property.GetValue(textureObject);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (TryCreateTextureIdFromValue(value, out var id))
+            {
+                textureHandle = id;
+                return true;
+            }
+        }
+
+        textureHandle = default;
+        return false;
+    }
+
+    private static bool TryCreateTextureIdFromValue(object? value, out ImTextureID textureId)
+    {
+        if (value is ImTextureID direct)
+        {
+            textureId = direct;
+            return true;
+        }
+
+        if (value == null)
+        {
+            textureId = default;
+            return false;
+        }
+
+        var textureType = typeof(ImTextureID);
+        var valueType = value.GetType();
+        var constructors = textureType.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        foreach (var ctor in constructors)
+        {
+            var ctorParams = ctor.GetParameters();
+            if (ctorParams.Length != 1)
+                continue;
+
+            var targetType = ctorParams[0].ParameterType;
+            object? argValue = null;
+            var canConvert = false;
+
+            if (targetType.IsAssignableFrom(valueType))
+            {
+                argValue = value;
+                canConvert = true;
+            }
+            else
+            {
+                try
+                {
+                    argValue = Convert.ChangeType(value, targetType);
+                    canConvert = true;
+                }
+                catch
+                {
+                }
+            }
+
+            if (!canConvert)
+                continue;
+
+            try
+            {
+                var created = ctor.Invoke(new[] { argValue });
+                if (created is ImTextureID typed)
+                {
+                    textureId = typed;
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        textureId = default;
+        return false;
     }
 
     public override void PreDraw()
@@ -214,72 +355,65 @@ public class QuestTrackerWindow : Window
 
     private void DrawQuestEntry(QuestData quest)
     {
-        this.DrawCustomIcon();
-        this.DrawGlowText(quest.Title, this.FFXIVGold, true);
-
-        ImGui.Indent(20f);
-        this.DrawGlowText("\u25BA", this.FFXIVBlue, false);
-        ImGui.SameLine(0f, 6f);
-
         var objectiveText = !string.IsNullOrEmpty(quest.Description)
             ? quest.Description
             : $"Complete {quest.GoalCount} objectives";
 
-        this.DrawGlowText(objectiveText, this.FFXIVBlue, true);
-        this.DrawGlowText($"({quest.CurrentCount}/{quest.GoalCount})", this.FFXIVBlue, false);
-        ImGui.Unindent(20f);
+        var rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X - 8f;
+        var iconWidth = this.HasCustomQuestIcon ? 20f : 12f;
+        var lineSpacing = 2f;
+
+        var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - 6f);
+        this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos);
+        this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
+
+        var objectivePos = this.SetCursorForRightAlignedText(objectiveText, rightEdge);
+        this.DrawHaloText(objectiveText, this.FFXIVBlue, objectivePos);
+
+        var progressText = $"{quest.CurrentCount}/{quest.GoalCount}";
+        var progressPos = this.SetCursorForRightAlignedText(progressText, rightEdge);
+        this.DrawHaloText(progressText, this.FFXIVBlue, progressPos);
+
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + lineSpacing);
         ImGui.Spacing();
     }
 
-    private void DrawGlowText(string text, Vector4 color, bool wrap)
+    private Vector2 SetCursorForRightAlignedText(string text, float rightEdgeX)
     {
-        var pos = ImGui.GetCursorScreenPos();
+        var textSize = ImGui.CalcTextSize(text);
+        var cursorScreen = ImGui.GetCursorScreenPos();
+        var leftX = MathF.Max(ImGui.GetWindowPos().X + 6f, rightEdgeX - textSize.X);
+        var localX = leftX - ImGui.GetWindowPos().X;
+        ImGui.SetCursorPosX(localX);
+        return new Vector2(leftX, cursorScreen.Y);
+    }
+
+    private void DrawHaloText(string text, Vector4 haloColor, Vector2 textPos)
+    {
         var drawList = ImGui.GetWindowDrawList();
-        var glowU32 = ImGui.ColorConvertFloat4ToU32(this.GlowColor);
+        var haloU32 = ImGui.ColorConvertFloat4ToU32(haloColor);
+        drawList.AddText(new Vector2(textPos.X + 1, textPos.Y + 0), haloU32, text);
+        drawList.AddText(new Vector2(textPos.X - 1, textPos.Y + 0), haloU32, text);
+        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y + 1), haloU32, text);
+        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y - 1), haloU32, text);
 
-        drawList.AddText(new Vector2(pos.X + 1, pos.Y + 0), glowU32, text);
-        drawList.AddText(new Vector2(pos.X - 1, pos.Y + 0), glowU32, text);
-        drawList.AddText(new Vector2(pos.X + 0, pos.Y + 1), glowU32, text);
-        drawList.AddText(new Vector2(pos.X + 0, pos.Y - 1), glowU32, text);
-
-        ImGui.PushStyleColor(ImGuiCol.Text, color);
-        if (wrap)
-            ImGui.TextWrapped(text);
-        else
-            ImGui.Text(text);
+        ImGui.PushStyleColor(ImGuiCol.Text, this.WhiteText);
+        ImGui.TextUnformatted(text);
         ImGui.PopStyleColor();
     }
 
-    private void DrawCustomIcon()
+    private void DrawCustomIconAt(float x, float y)
     {
+        ImGui.SetCursorScreenPos(new Vector2(x, y));
         if (this.HasCustomQuestIcon)
         {
-            var pos = ImGui.GetCursorScreenPos();
-            var drawList = ImGui.GetWindowDrawList();
-
-            drawList.AddImage(
-                this.CustomQuestIconHandle,
-                new Vector2(pos.X + 1, pos.Y + 1),
-                new Vector2(pos.X + 21, pos.Y + 21),
-                Vector2.Zero,
-                Vector2.One,
-                ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.5f)));
-
             ImGui.Image(this.CustomQuestIconHandle, new Vector2(20, 20));
-            ImGui.SameLine(0f, 6f);
             return;
         }
 
-        var fallbackPos = ImGui.GetCursorScreenPos();
-        var fallbackDrawList = ImGui.GetWindowDrawList();
-
-        fallbackDrawList.AddText(
-            new Vector2(fallbackPos.X + 1, fallbackPos.Y + 1),
-            ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.5f)),
-            "!");
-
-        ImGui.TextColored(this.FFXIVGold, "!");
-        ImGui.SameLine(0f, 6f);
+        var pos = ImGui.GetCursorScreenPos();
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddText(pos, ImGui.ColorConvertFloat4ToU32(this.FFXIVGold), "!");
     }
 
     public void Dispose()
