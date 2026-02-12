@@ -8,6 +8,11 @@ using SocialMorpho.Data;
 
 namespace SocialMorpho.Services;
 
+// NOTE: This is a stub implementation for native quest injection into FFXIV's ToDoList.
+// Native quest injection is complex and requires deep knowledge of FFXIV's internal memory structures.
+// For now, QuestTrackerWindow.cs provides a working ImGui overlay as an alternative.
+// This file is kept for future implementation reference.
+
 public unsafe class NativeQuestInjector : IDisposable
 {
     private readonly Plugin Plugin;
