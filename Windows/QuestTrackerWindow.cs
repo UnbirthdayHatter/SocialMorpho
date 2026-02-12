@@ -11,7 +11,7 @@ namespace SocialMorpho.Windows;
 
 public class QuestTrackerWindow : Window
 {
-    private const float ContainerWidth = 250f;
+    private const float ContainerWidth = 300f;
     private const float IconSize = 26f;
     private const float IconGap = 2f;
     private const float RightPadding = 10f;
@@ -23,8 +23,8 @@ public class QuestTrackerWindow : Window
     private bool LoggedWrapFailure;
 
     private readonly Vector4 TitleColor = new(0.898f, 0.765f, 0.514f, 1.0f); // #E5C383
-    private readonly Vector4 BodyColor = new(0.949f, 0.949f, 0.949f, 1.0f); // #F2F2F2
-    private readonly Vector4 ShadowColor = new(0f, 0f, 0f, 0.70f);
+    private readonly Vector4 BodyColor = new(0.41f, 0.80f, 0.95f, 1.0f);
+    private readonly Vector4 ShadowColor = new(0f, 0f, 0f, 0.55f);
 
     public QuestTrackerWindow(Plugin plugin, QuestManager questManager)
         : base("Quest Tracker##SocialMorphoTracker",
@@ -116,7 +116,7 @@ public class QuestTrackerWindow : Window
         var textRightEdge = rightEdge - iconWidth - IconGap;
         var maxTextWidth = MathF.Max(60f, textRightEdge - leftEdge);
 
-        const float titleScale = 1.10f;
+        const float titleScale = 1.04f;
         const float bodyScale = 1.00f;
 
         var y = MathF.Round(ImGui.GetCursorScreenPos().Y);
@@ -125,7 +125,7 @@ public class QuestTrackerWindow : Window
         foreach (var line in titleLines)
         {
             var pos = this.SetCursorForRightAlignedText(line, textRightEdge, y, titleScale);
-            this.DrawShadowedText(line, this.TitleColor, pos, titleScale, bold: true);
+            this.DrawShadowedText(line, this.TitleColor, pos, titleScale);
             y += ImGui.GetTextLineHeight() * titleScale;
         }
 
@@ -160,7 +160,7 @@ public class QuestTrackerWindow : Window
         return new Vector2(leftX, y);
     }
 
-    private void DrawShadowedText(string text, Vector4 textColor, Vector2 textPos, float scale, bool bold = false)
+    private void DrawShadowedText(string text, Vector4 textColor, Vector2 textPos, float scale)
     {
         var drawList = ImGui.GetWindowDrawList();
         var shadowU32 = ImGui.ColorConvertFloat4ToU32(this.ShadowColor);
@@ -168,11 +168,6 @@ public class QuestTrackerWindow : Window
 
         ImGui.SetWindowFontScale(scale);
         ImGui.PushStyleColor(ImGuiCol.Text, textColor);
-        if (bold)
-        {
-            var textU32 = ImGui.ColorConvertFloat4ToU32(textColor);
-            drawList.AddText(textPos, textU32, text);
-        }
         ImGui.TextUnformatted(text);
         ImGui.PopStyleColor();
         ImGui.SetWindowFontScale(1.0f);
