@@ -7,10 +7,10 @@ The `NativeQuestInjector.cs` has been fully implemented to inject custom quests 
 
 ### Core Approach
 1. Access `AtkStage` instance to get string array data using `StringArrayType.ToDoList`
-2. Access `ToDoListNumberArray` instance for quest metadata
-3. Read current native quest count from the number array
+2. Access number array using `NumberArrayType.ToDoList` and cast to `ToDoListNumberArray*`
+3. Read current native quest count from `QuestCount` field
 4. Calculate available slots after native quests (max 10 total)
-5. Inject quest data using managed memory allocation
+5. Inject quest data using string array SetValue with managed memory
 6. Update total quest count to include custom quests
 
 ### Key Methods
@@ -26,15 +26,16 @@ The `NativeQuestInjector.cs` has been fully implemented to inject custom quests 
 // Access string array using StringArrayType enum
 var stringArray = AtkStage.Instance()->GetStringArrayData(StringArrayType.ToDoList);
 
-// Access number array using instance method
-var numberArray = ToDoListNumberArray.Instance();
+// Access number array using NumberArrayType enum and cast to typed pointer
+var numberArray = AtkStage.Instance()->GetNumberArrayData(NumberArrayType.ToDoList);
+var todoNumberArray = (ToDoListNumberArray*)numberArray->IntArray;
 ```
-This approach is more stable than using hardcoded array IDs (72, 73) as it uses the FFXIVClientStructs enum values.
+This approach uses the FFXIVClientStructs enum values and typed struct access for better stability and type safety.
 
 #### String Injection
 ```csharp
-stringArray->SetValue(questIndex * 3, quest.Title, false, true, false);
-stringArray->SetValue(questIndex * 3 + 1, objectiveText, false, true, false);
+stringArray->SetValue(questSlot * 3, quest.Title, false, true, false);
+stringArray->SetValue(questSlot * 3 + 1, objectiveText, false, true, false);
 ```
 - Uses `managed=true` parameter so game handles memory allocation
 - No manual memory tracking needed for strings
@@ -42,27 +43,28 @@ stringArray->SetValue(questIndex * 3 + 1, objectiveText, false, true, false);
 
 #### Number Array Updates
 ```csharp
-numberArray->IntArray[questIndex * 10 + 1] = iconId;
-numberArray->IntArray[questIndex * 10 + 2] = 1;
-numberArray->IntArray[questIndex * 10 + 3] = quest.CurrentCount;
-numberArray->IntArray[questIndex * 10 + 4] = quest.GoalCount;
+todoNumberArray->QuestTypeIcon[questSlot] = iconId;
+todoNumberArray->ObjectiveCountForQuest[questSlot] = 1;
+todoNumberArray->ObjectiveProgress[questSlot] = quest.CurrentCount;
+todoNumberArray->ButtonCountForQuest[questSlot] = 0;
 ```
-- Each quest uses multiple integer slots for metadata
-- Stores icon ID, objective count, current progress, and goal count
+- Uses typed field accessors for better safety and clarity
+- Each quest uses dedicated fields in the ToDoListNumberArray struct
+- Field names match the actual struct definition from FFXIVClientStructs
 
 ## Important Configuration Values
 
 ### Array Access Methods
 - **StringArrayData**: Accessed via `AtkStage.Instance()->GetStringArrayData(StringArrayType.ToDoList)`
-- **NumberArrayData**: Accessed via `ToDoListNumberArray.Instance()`
+- **NumberArrayData**: Accessed via `AtkStage.Instance()->GetNumberArrayData(NumberArrayType.ToDoList)` and cast to `ToDoListNumberArray*`
 
-These use FFXIVClientStructs enum types and are more version-stable than hardcoded IDs.
+These use FFXIVClientStructs enum types and typed struct pointers for better type safety and version stability.
 
 ### Array Indexing
-- **String Array**: `questIndex * 3` for title, `questIndex * 3 + 1` for objective
-- **Number Array**: `questIndex * 10 + offset` for various metadata
+- **String Array**: `questSlot * 3` for title, `questSlot * 3 + 1` for objective
+- **Number Array**: Uses typed field accessors like `QuestTypeIcon[questSlot]`, `ObjectiveCountForQuest[questSlot]`, etc.
 
-These formulas are based on the ToDoList's internal structure and may require adjustment.
+The typed field access provides compile-time safety and matches the actual struct definition.
 
 ### Quest Icons
 - **Social Quest**: 61412
@@ -76,18 +78,18 @@ The implementation uses `SetValue(managed=true)` which:
 - Lets the game allocate memory in UI space
 - Automatically handles string copying
 - Prevents memory leaks from manual allocation
-- Allows immediate pointer disposal after call
+- No need to track allocated pointers
 
-### Legacy Methods Kept
-`AllocateString()` and `FreeAllocatedStrings()` methods are retained for potential future use or alternative allocation strategies.
+### Simplified Approach
+Previous manual memory allocation methods (`AllocateString()`, `FreeAllocatedStrings()`) have been removed since `SetValue` with managed=true handles all memory management automatically.
 
 ## Error Handling
 
 ### Safety Checks
 1. Active quests availability check
 2. AtkStage instance and string array null check
-3. ToDoListNumberArray instance null check
-4. Native quest count retrieval
+3. Number array and ToDoListNumberArray cast null check
+4. Native quest count retrieval from QuestCount field
 5. Available slot calculation
 
 ### Exception Handling
@@ -111,11 +113,12 @@ FFXIV's ToDoList supports a maximum of 10 quests total (native + custom). The im
 ### Native Quest Preservation
 Custom quests are always appended after native FFXIV quests. If there are already 10 native quests, no custom quests will be injected.
 
-### Index Formula Accuracy
-The indexing formulas (`questIndex * 3`, `questIndex * 10`) are based on observations and may need refinement if:
-- Quests appear in wrong positions
-- Quest data displays incorrectly
-- Native quests are overwritten
+### Typed Field Access
+The implementation uses typed field accessors (e.g., `QuestTypeIcon[questSlot]`) which provide:
+- Compile-time type safety
+- Better IDE support and IntelliSense
+- Clearer code that matches the actual struct definition
+- Reduced risk of indexing errors
 
 ## Testing Recommendations
 
@@ -148,10 +151,9 @@ Since this code interacts with FFXIV's native UI, it must be tested in-game:
 ## Future Enhancements
 
 ### Potential Improvements
-1. **Better Index Calculation** - Analyze ToDoList structure for exact formulas
-2. **Custom Quest Ordering** - Allow user-defined quest priority
-3. **Quest Categories** - Group quests by type in the tracker
-4. **Conditional Display** - Show/hide quests based on player state
+1. **Custom Quest Ordering** - Allow user-defined quest priority
+2. **Quest Categories** - Group quests by type in the tracker
+3. **Conditional Display** - Show/hide quests based on player state
 
 ### Performance Optimization
 - Only update when quest data changes (currently updates every frame)
@@ -164,15 +166,15 @@ Since this code interacts with FFXIV's native UI, it must be tested in-game:
 - Check if ShowQuestTracker is enabled in settings
 - Verify there are available slots (< 10 total quests)
 - Check Dalamud logs for errors
-- Confirm StringArrayType.ToDoList is correct for game version
+- Confirm StringArrayType.ToDoList and NumberArrayType.ToDoList are correct for game version
 
 ### Game Crashes
 - Array access may be invalid for current game version
-- Index formulas may be accessing invalid memory
+- ToDoListNumberArray struct definition may have changed
 - Check for null pointer dereferences in logs
 
 ### Quest Data Incorrect
-- Index formulas may need adjustment
+- Verify ToDoListNumberArray field names match current FFXIVClientStructs version
 - String encoding issues (UTF-8)
 - Icon IDs may be wrong for quest type
 
@@ -188,3 +190,4 @@ Since this code interacts with FFXIV's native UI, it must be tested in-game:
 
 - **Initial Implementation** (2024-02-12): Implemented using RaptureAtkModule with hardcoded array IDs
 - **Modernized Implementation** (2026-02-12): Updated to use StringArrayType.ToDoList and ToDoListNumberArray.Instance() for better version stability
+- **Fixed Implementation** (2026-02-12): Updated to use NumberArrayType.ToDoList with typed field accessors (QuestCount, QuestTypeIcon, etc.) instead of IntArray indexing
