@@ -64,9 +64,6 @@ public unsafe class NativeQuestInjector : IDisposable
         // Get the current number of native quests
         // The first element in the number array typically contains metadata about the list
         var nativeQuestCount = numberArrayData->IntArray[0];
-        
-        // Free previously allocated strings to prevent memory leaks
-        FreeAllocatedStrings();
 
         // Calculate how many custom quests we can inject (max 10 total)
         var maxQuests = 10;
@@ -85,20 +82,20 @@ public unsafe class NativeQuestInjector : IDisposable
             var questIndex = startIndex + i;
 
             // Build quest title string
-            var titlePtr = AllocateString(quest.Title);
+            var title = quest.Title;
             
             // Build objective string with progress
             var objectiveText = $"{quest.Description} ({quest.CurrentCount}/{quest.GoalCount})";
-            var objectivePtr = AllocateString(objectiveText);
 
             // Get quest icon based on type
             var iconId = GetQuestIcon(quest.Type);
 
             // Set quest title in string array (title index)
-            stringArrayData->SetValue(questIndex * 3, (byte*)titlePtr, false, true, false);
+            // Using managed=true so the game allocates memory and we don't need to track it
+            stringArrayData->SetValue(questIndex * 3, title, false, true, false);
             
             // Set quest objective in string array (objective index)
-            stringArrayData->SetValue(questIndex * 3 + 1, (byte*)objectivePtr, false, true, false);
+            stringArrayData->SetValue(questIndex * 3 + 1, objectiveText, false, true, false);
 
             // Set quest icon ID in number array
             numberArrayData->IntArray[questIndex * 10 + 1] = iconId;
