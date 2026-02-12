@@ -48,8 +48,15 @@ public class QuestTrackerWindow : Window
     {
         try
         {
+            var assemblyDir = Plugin.PluginInterface.AssemblyLocation.DirectoryName;
+            if (string.IsNullOrEmpty(assemblyDir))
+            {
+                Plugin.PluginLog.Warning("Assembly directory path is null or empty, cannot load custom quest icon");
+                return;
+            }
+
             var iconPath = Path.Combine(
-                Plugin.PluginInterface.AssemblyLocation.DirectoryName!,
+                assemblyDir,
                 "Resources",
                 "quest_icon.png"
             );
@@ -57,11 +64,15 @@ public class QuestTrackerWindow : Window
             if (File.Exists(iconPath))
             {
                 var file = new FileInfo(iconPath);
-                CustomQuestIcon = TextureProvider.GetFromFile(file).RentAsync().Result;
+                CustomQuestIcon = TextureProvider.GetFromFile(file).GetWrapOrEmpty();
                 
-                if (CustomQuestIcon != null)
+                if (CustomQuestIcon != null && CustomQuestIcon.ImGuiHandle != IntPtr.Zero)
                 {
                     Plugin.PluginLog.Info($"Custom quest icon loaded from: {iconPath}");
+                }
+                else
+                {
+                    Plugin.PluginLog.Warning($"Custom quest icon loaded but texture handle is invalid");
                 }
             }
             else
