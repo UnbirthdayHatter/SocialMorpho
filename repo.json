@@ -1,1 +1,17 @@
-{"AssemblyVersion": "1.1.0.0"}
+[
+  {
+    "Author": "UnbirthdayHatter",
+    "Name": "SocialMorpho",
+    "InternalName": "SocialMorpho",
+    "AssemblyVersion": "1.1.0.0",
+    "Description": "A plugin designed to endance the social ecosystem in FFXIV.",
+    "ApplicableVersion": "any",
+    "RepoUrl": "https://github.com/UnbirthdayHatter/SocialMorpho",
+    "DownloadLinkInstall": "https://github.com/UnbirthdayHatter/SocialMorpho/releases/latest/download/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/UnbirthdayHatter/SocialMorpho/releases/latest/download/latest.zip",
+    "DownloadCount": 0,
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "Punchline": "Social interaction enhancements for FFXIV."
+  }
+]
