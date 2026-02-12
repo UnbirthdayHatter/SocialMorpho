@@ -64,6 +64,9 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        sparse-checkout: |
+          SocialMorpho.csproj
     
     - name: Extract version from csproj
       id: version
@@ -100,7 +103,7 @@ jobs:
         ls -lh SocialMorpho-v${{ steps.version.outputs.version }}.zip
     
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
       with:
         tag_name: v${{ steps.version.outputs.version }}
         name: Release v${{ steps.version.outputs.version }}
