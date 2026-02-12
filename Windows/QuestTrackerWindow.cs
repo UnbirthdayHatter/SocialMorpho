@@ -136,7 +136,9 @@ public class QuestTrackerWindow : Window
         this.DrawCustomIconAt(rightEdge - iconWidth, iconY);
 
         y += 3f;
-        var objectiveLines = this.WrapToWidth(objectiveText, maxTextWidth, bodyScale);
+        var objectiveWithProgress = $"{objectiveText} {quest.CurrentCount}/{quest.GoalCount}";
+        var objectiveLines = this.WrapToWidth(objectiveWithProgress, maxTextWidth, bodyScale);
+        var firstObjectiveY = y;
         foreach (var line in objectiveLines)
         {
             var pos = this.SetCursorForRightAlignedText(line, textRightEdge, y, bodyScale);
@@ -144,12 +146,8 @@ public class QuestTrackerWindow : Window
             y += ImGui.GetTextLineHeight() * bodyScale;
         }
 
-        y += 1f;
-        var progressText = $"{quest.CurrentCount}/{quest.GoalCount}";
-        var progressPos = this.SetCursorForRightAlignedText(progressText, textRightEdge, y, bodyScale);
-        this.DrawHaloText(progressText, this.BodyHaloColor, progressPos, bodyScale);
-
-        y += ImGui.GetTextLineHeight() * bodyScale + 6f;
+        this.DrawObjectiveMarker(rightEdge - 1f, firstObjectiveY + (ImGui.GetTextLineHeight() * bodyScale * 0.52f));
+        y += 6f;
         ImGui.SetCursorScreenPos(new Vector2(leftEdge, y));
         ImGui.Spacing();
     }
@@ -166,6 +164,8 @@ public class QuestTrackerWindow : Window
 
     private void DrawHaloText(string text, Vector4 haloColor, Vector2 textPos, float scale)
     {
+        ImGui.SetWindowFontScale(scale);
+
         var drawList = ImGui.GetWindowDrawList();
         var shadowU32 = ImGui.ColorConvertFloat4ToU32(this.ShadowColor);
         var haloU32 = ImGui.ColorConvertFloat4ToU32(haloColor);
@@ -175,7 +175,6 @@ public class QuestTrackerWindow : Window
         drawList.AddText(new Vector2(textPos.X, textPos.Y + 1), haloU32, text);
         drawList.AddText(new Vector2(textPos.X, textPos.Y - 1), haloU32, text);
 
-        ImGui.SetWindowFontScale(scale);
         ImGui.PushStyleColor(ImGuiCol.Text, this.WhiteText);
         ImGui.TextUnformatted(text);
         ImGui.PopStyleColor();
@@ -214,6 +213,21 @@ public class QuestTrackerWindow : Window
 
         var fallbackDrawList = ImGui.GetWindowDrawList();
         fallbackDrawList.AddText(new Vector2(x, y), ImGui.ColorConvertFloat4ToU32(this.TitleHaloColor), "!");
+    }
+
+    private void DrawObjectiveMarker(float x, float y)
+    {
+        var drawList = ImGui.GetWindowDrawList();
+        var glow = ImGui.ColorConvertFloat4ToU32(new Vector4(0.29f, 0.86f, 1.00f, 0.45f));
+        var body = ImGui.ColorConvertFloat4ToU32(new Vector4(0.29f, 0.86f, 1.00f, 0.95f));
+
+        drawList.AddCircleFilled(new Vector2(x - 2f, y), 4.0f, glow);
+        drawList.AddCircleFilled(new Vector2(x - 2f, y), 2.2f, body);
+        drawList.AddTriangleFilled(
+            new Vector2(x - 0.5f, y - 1.8f),
+            new Vector2(x + 3.0f, y),
+            new Vector2(x - 0.5f, y + 1.8f),
+            body);
     }
 
     private static bool TryGetImGuiTextureFromWrap(IDalamudTextureWrap wrap, out ImTextureID textureId)
