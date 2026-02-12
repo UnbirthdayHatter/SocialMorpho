@@ -88,26 +88,30 @@ public class QuestOfferWindow : Window, IDisposable
         {
             var contentStart = frameStart + new Vector2(frameSize.X * 0.103f, frameSize.Y * 0.294f);
             var contentEnd = frameStart + new Vector2(frameSize.X * 0.897f, frameSize.Y * 0.541f);
-            this.TryDrawTextureFit(this.offerImage, contentStart, contentEnd);
+            this.TryDrawTexture(this.offerImage, contentStart, contentEnd);
         }
 
         // Overlay title, text and buttons aligned to the frame's designed content areas.
         var titleText = this.currentOffer?.PopupTitle ?? string.Empty;
-        var titleSize = ImGui.CalcTextSize(titleText);
+        const float titleScale = 1.95f;
+        const float descHeaderScale = 1.15f;
+        const float descBodyScale = 1.28f;
+
+        var titleSize = ImGui.CalcTextSize(titleText) * titleScale;
         var titleX = frameStart.X + ((frameSize.X - titleSize.X) * 0.5f);
-        var titleY = frameStart.Y + (frameSize.Y * 0.175f);
-        var blackText = ImGui.GetColorU32(new Vector4(0.10f, 0.10f, 0.10f, 1f));
-        drawList.AddText(new Vector2(titleX, titleY), blackText, titleText);
+        var titleY = frameStart.Y + (frameSize.Y * 0.158f);
+        var blackTextVec = new Vector4(0.10f, 0.10f, 0.10f, 1f);
+        this.DrawScaledText(titleText, new Vector2(titleX, titleY), blackTextVec, titleScale);
 
         var textLeft = frameStart.X + (frameSize.X * 0.13f);
         var textTop = frameStart.Y + (frameSize.Y * 0.61f);
         var textWidth = frameSize.X * 0.74f;
-        var textBottom = frameStart.Y + (frameSize.Y * 0.86f);
-        var textLineHeight = ImGui.GetTextLineHeightWithSpacing();
+        var textBottom = frameStart.Y + (frameSize.Y * 0.865f);
+        var textLineHeight = ImGui.GetTextLineHeightWithSpacing() * descBodyScale;
         var descriptionTitle = "Description";
-        drawList.AddText(new Vector2(textLeft, textTop - textLineHeight), blackText, descriptionTitle);
+        this.DrawScaledText(descriptionTitle, new Vector2(textLeft, textTop - (ImGui.GetTextLineHeightWithSpacing() * 1.10f)), blackTextVec, descHeaderScale);
 
-        var lines = this.WrapTextToWidth(this.currentOffer?.PopupDescription ?? string.Empty, textWidth);
+        var lines = this.WrapTextToWidth(this.currentOffer?.PopupDescription ?? string.Empty, textWidth, descBodyScale);
         var y = textTop;
         foreach (var line in lines)
         {
@@ -116,13 +120,13 @@ public class QuestOfferWindow : Window, IDisposable
                 break;
             }
 
-            drawList.AddText(new Vector2(textLeft, y), blackText, line);
+            this.DrawScaledText(line, new Vector2(textLeft, y), blackTextVec, descBodyScale);
             y += textLineHeight;
         }
 
-        var buttonY = frameStart.Y + (frameSize.Y * 0.90f);
+        var buttonY = frameStart.Y + (frameSize.Y * 0.888f);
         var buttonWidth = frameSize.X * 0.27f;
-        var buttonHeight = frameSize.Y * 0.055f;
+        var buttonHeight = frameSize.Y * 0.070f;
         var buttonGap = frameSize.X * 0.12f;
         var leftButtonX = frameStart.X + (frameSize.X * 0.17f);
         var rightButtonX = leftButtonX + buttonWidth + buttonGap;
@@ -295,7 +299,17 @@ public class QuestOfferWindow : Window, IDisposable
         }
     }
 
-    private List<string> WrapTextToWidth(string text, float maxWidth)
+    private void DrawScaledText(string text, Vector2 pos, Vector4 color, float scale)
+    {
+        ImGui.SetWindowFontScale(scale);
+        ImGui.PushStyleColor(ImGuiCol.Text, color);
+        ImGui.SetCursorScreenPos(pos);
+        ImGui.TextUnformatted(text);
+        ImGui.PopStyleColor();
+        ImGui.SetWindowFontScale(1.0f);
+    }
+
+    private List<string> WrapTextToWidth(string text, float maxWidth, float scale)
     {
         var result = new List<string>();
         if (string.IsNullOrWhiteSpace(text))
@@ -316,7 +330,7 @@ public class QuestOfferWindow : Window, IDisposable
             for (var i = 1; i < words.Length; i++)
             {
                 var candidate = $"{current} {words[i]}";
-                if (ImGui.CalcTextSize(candidate).X <= maxWidth)
+                if ((ImGui.CalcTextSize(candidate).X * scale) <= maxWidth)
                 {
                     current = candidate;
                 }
