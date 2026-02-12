@@ -30,20 +30,15 @@ public class QuestTrackerWindow : Window
     {
         Plugin = plugin;
         QuestManager = questManager;
-        LoadCustomIcon();
+        
+        // TODO: Re-enable custom icon loading when Dalamud API is stable
+        Plugin.PluginLog.Info("Quest Tracker initialized - using fallback icon");
 
         // Position will be set in PreDraw to ensure accurate screen size
         PositionCondition = ImGuiCond.FirstUseEver;
 
         // Semi-transparent background
         BgAlpha = 0.75f;
-    }
-
-    private void LoadCustomIcon()
-    {
-        // Custom icon loading is currently disabled due to Dalamud API changes
-        // The tracker will use the fallback icon (❗) instead
-        Plugin.PluginLog.Info("Custom icon loading skipped - using fallback icon");
     }
 
     public override void PreDraw()
