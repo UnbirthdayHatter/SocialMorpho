@@ -29,10 +29,17 @@ jobs:
         New-Item -ItemType Directory -Force -Path $dalamudPath
         
         # Download the specific Dalamud version (14.0.2.1)
-        # Using the stg distribution which has versioned builds
-        $url = "https://goatcorp.github.io/dalamud-distrib/stg/latest.zip"
+        # Using the release distribution which has stable builds
+        $url = "https://goatcorp.github.io/dalamud-distrib/release/latest.zip"
         Invoke-WebRequest -Uri $url -OutFile "dalamud.zip"
         Expand-Archive -Force "dalamud.zip" $dalamudPath
+        
+        # List all downloaded DLLs for debugging
+        Write-Host "`n=== Downloaded Dalamud Files ==="
+        Get-ChildItem -Path $dalamudPath -Filter "*.dll" -Recurse | ForEach-Object {
+          Write-Host "  - $($_.FullName)"
+        }
+        Write-Host "================================`n"
         
         # Verify Dalamud.dll exists
         $dalamudDll = Join-Path $dalamudPath "Dalamud.dll"
@@ -43,6 +50,15 @@ jobs:
           Write-Host "Dalamud Version: $($version.FileVersion)"
         } else {
           Write-Error "❌ Dalamud.dll not found!"
+          exit 1
+        }
+        
+        # Verify Dalamud.Bindings.ImGui.dll exists
+        $imguiBindingsDll = Join-Path $dalamudPath "Dalamud.Bindings.ImGui.dll"
+        if (Test-Path $imguiBindingsDll) {
+          Write-Host "✅ Dalamud.Bindings.ImGui.dll found at: $imguiBindingsDll"
+        } else {
+          Write-Error "❌ Dalamud.Bindings.ImGui.dll not found!"
           exit 1
         }
     
