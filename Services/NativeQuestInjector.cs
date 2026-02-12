@@ -83,11 +83,10 @@ public unsafe class NativeQuestInjector : IDisposable
                 // Set quest icon based on type
                 int iconId = GetQuestIcon(quest.Type);
 
-                // Set quest title in string array (index = questSlot * 3)
-                stringArray->SetValue(questSlot * 3, quest.Title, false, true, false);
-                
-                // Set quest objective in string array (index = questSlot * 3 + 1)
-                stringArray->SetValue(questSlot * 3 + 1, objectiveText, false, true, false);
+                // TODO: Native quest string injection requires InteropGenerator.Runtime dependency
+                // For now, quest display uses QuestTrackerWindow.cs ImGui overlay
+                // Future: Research proper StringArrayData manipulation without SetValue()
+                Plugin.PluginLog.Debug($"Quest {questSlot}: {quest.Title} - {objectiveText}");
 
                 // Set quest icon using the correct field
                 todoNumberArray->QuestTypeIcon[questSlot] = iconId;
@@ -110,7 +109,7 @@ public unsafe class NativeQuestInjector : IDisposable
             // Enable quest list
             todoNumberArray->QuestListEnabled = true;
 
-            Plugin.PluginLog.Info($"Injected {injectedCount} custom quests into native ToDoList (after {nativeQuestCount} native quests)");
+            Plugin.PluginLog.Info($"Native quest injection infrastructure ready for {injectedCount} quests (display via overlay)");
         }
         catch (Exception ex)
         {
