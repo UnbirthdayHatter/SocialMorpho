@@ -70,8 +70,8 @@ jobs:
       shell: bash
       run: |
         VERSION=$(grep -oP '<Version>\K[^<]+' SocialMorpho.csproj)
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "Version extracted: $VERSION"
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        echo "Version extracted: ${VERSION}"
     
     - name: Download build artifacts
       uses: actions/download-artifact@v4
