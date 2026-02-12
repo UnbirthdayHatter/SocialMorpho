@@ -20,10 +20,11 @@ public class QuestTrackerWindow : Window
     private string? LoadedIconPath;
     private bool LoggedWrapFailure;
 
-    // Picked from provided reference captures, slightly softened for halo rendering.
-    private readonly Vector4 FFXIVGold = new(0.84f, 0.78f, 0.53f, 0.40f);
-    private readonly Vector4 FFXIVBlue = new(0.41f, 0.80f, 0.95f, 0.38f);
-    private readonly Vector4 WhiteText = new(1.0f, 1.0f, 1.0f, 1.0f);
+    // Tuned toward native Duty List styling.
+    private readonly Vector4 FFXIVGold = new(0.90f, 0.76f, 0.51f, 0.36f); // ~#E5C383 halo
+    private readonly Vector4 FFXIVBlue = new(0.41f, 0.80f, 0.95f, 0.34f); // sampled cyan halo
+    private readonly Vector4 WhiteText = new(0.95f, 0.95f, 0.95f, 1.0f); // ~#F2F2F2
+    private readonly Vector4 DropShadow = new(0.12f, 0.08f, 0.04f, 0.42f); // thin dark brown shadow
 
     public QuestTrackerWindow(Plugin plugin, QuestManager questManager)
         : base("Quest Tracker##SocialMorphoTracker",
@@ -148,8 +149,10 @@ public class QuestTrackerWindow : Window
     {
         var drawList = ImGui.GetWindowDrawList();
         var haloU32 = ImGui.ColorConvertFloat4ToU32(haloColor);
+        var shadowU32 = ImGui.ColorConvertFloat4ToU32(this.DropShadow);
 
-        // Crisp single halo (4-neighbor), no secondary blur pass.
+        // Thin shadow + crisp halo.
+        drawList.AddText(new Vector2(textPos.X + 1, textPos.Y + 1), shadowU32, text);
         drawList.AddText(new Vector2(textPos.X + 1, textPos.Y + 0), haloU32, text);
         drawList.AddText(new Vector2(textPos.X - 1, textPos.Y + 0), haloU32, text);
         drawList.AddText(new Vector2(textPos.X + 0, textPos.Y + 1), haloU32, text);
