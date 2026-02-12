@@ -1,4 +1,6 @@
 using Dalamud.Game.Command;
+using Dalamud.Game.Text;
+using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
@@ -48,12 +50,8 @@ public sealed class Plugin : IDalamudPlugin
 
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
-
-        // Initialize default quests if empty
-        if (Configuration.SavedQuests.Count == 0)
-        {
-            InitializeDefaultQuests();
-        }
+        MigrateDoteQuestText();
+        MigrateLegacyStarterQuests();
 
         QuestManager = new QuestManager(Configuration);
         
@@ -70,6 +68,7 @@ public sealed class Plugin : IDalamudPlugin
 
         // Check and reset quests based on schedule
         QuestManager.CheckAndResetQuests();
+        QuestManager.EnsureDailySocialQuests(DateTime.Now);
 
         QuestNotificationService = new QuestNotificationService(this, ClientState, ChatGui, PluginLog);
 
@@ -96,50 +95,13 @@ public sealed class Plugin : IDalamudPlugin
             HelpMessage = "Open Social Morpho quest menu"
         });
 
+        ChatGui.ChatMessage += OnChatMessage;
+
         // Subscribe to draw event
         PluginInterface.UiBuilder.Draw += DrawUI;
         PluginInterface.UiBuilder.OpenConfigUi += DrawConfigUI;
 
         PluginLog.Info("Social Morpho initialized successfully");
-    }
-
-    private void InitializeDefaultQuests()
-    {
-        Configuration.SavedQuests.Add(new QuestData
-        {
-            Id = 1,
-            Title = "Get Dotted Three Times",
-            Description = "Receive DoT effects from 3 different players",
-            Type = QuestType.Social,
-            GoalCount = 3,
-            CurrentCount = 0,
-            Completed = false
-        });
-
-        Configuration.SavedQuests.Add(new QuestData
-        {
-            Id = 2,
-            Title = "Hug Four Players",
-            Description = "Use the hug emote on 4 different players",
-            Type = QuestType.Emote,
-            GoalCount = 4,
-            CurrentCount = 0,
-            Completed = false
-        });
-
-        Configuration.SavedQuests.Add(new QuestData
-        {
-            Id = 3,
-            Title = "Social Butterfly",
-            Description = "Use 5 social actions with different players",
-            Type = QuestType.Social,
-            GoalCount = 5,
-            CurrentCount = 0,
-            Completed = false
-        });
-
-        Configuration.Save();
-        PluginLog.Info("Default quests initialized");
     }
 
     private void DrawUI()
@@ -157,12 +119,87 @@ public sealed class Plugin : IDalamudPlugin
         MainWindow.Toggle();
     }
 
+    private void OnChatMessage(XivChatType type, int timestamp, ref SeString sender, ref SeString message, ref bool isHandled)
+    {
+        try
+        {
+            var text = message.TextValue;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return;
+            }
+
+            if (text.Contains("dotes on you", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("dotes you", StringComparison.OrdinalIgnoreCase))
+            {
+                QuestManager.IncrementDoteQuestProgress();
+                return;
+            }
+
+            QuestManager.IncrementQuestProgressFromChat(text);
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warning($"Error processing chat message for quest progress: {ex.Message}");
+        }
+    }
+
+    private void MigrateDoteQuestText()
+    {
+        var changed = false;
+        foreach (var quest in Configuration.SavedQuests)
+        {
+            if (quest.Title.Contains("Dotted", StringComparison.OrdinalIgnoreCase))
+            {
+                quest.Title = quest.Title.Replace("Dotted", "Doted", StringComparison.OrdinalIgnoreCase);
+                changed = true;
+            }
+
+            if (quest.Description.Contains("DoT effects", StringComparison.OrdinalIgnoreCase))
+            {
+                quest.Description = "Have 3 different players use /dote on you";
+                changed = true;
+            }
+
+            if ((quest.Title.Contains("doted", StringComparison.OrdinalIgnoreCase) ||
+                 quest.Description.Contains("/dote", StringComparison.OrdinalIgnoreCase)) &&
+                quest.TriggerPhrases.Count == 0)
+            {
+                quest.TriggerPhrases.Add("dotes on you");
+                quest.TriggerPhrases.Add("dotes you");
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            Configuration.Save();
+        }
+    }
+
+    private void MigrateLegacyStarterQuests()
+    {
+        var removed = Configuration.SavedQuests.RemoveAll(q =>
+            q.Id <= 3 &&
+            (q.Title.Contains("Get Doted", StringComparison.OrdinalIgnoreCase) ||
+             q.Title.Contains("Get Dotted", StringComparison.OrdinalIgnoreCase) ||
+             q.Title.Contains("Hug Four Players", StringComparison.OrdinalIgnoreCase) ||
+             q.Title.Contains("Social Butterfly", StringComparison.OrdinalIgnoreCase)));
+
+        if (removed > 0)
+        {
+            Configuration.Save();
+        }
+    }
+
     public void Dispose()
     {
         WindowSystem.RemoveAllWindows();
 
         CommandManager.RemoveHandler(CommandName);
         CommandManager.RemoveHandler(CommandNameAlt);
+
+        ChatGui.ChatMessage -= OnChatMessage;
 
         PluginInterface.UiBuilder.Draw -= DrawUI;
         PluginInterface.UiBuilder.OpenConfigUi -= DrawConfigUI;

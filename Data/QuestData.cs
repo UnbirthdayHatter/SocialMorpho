@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace SocialMorpho.Data;
 
@@ -16,6 +17,7 @@ public class QuestData
     public DateTime? CompletedAt { get; set; }
     public ResetSchedule ResetSchedule { get; set; } = ResetSchedule.None;
     public DateTime? LastResetDate { get; set; }
+    public List<string> TriggerPhrases { get; set; } = new();
 }
 
 public enum QuestType

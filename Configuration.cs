@@ -17,6 +17,8 @@ public class Configuration : IPluginConfiguration
 
     // Quest data
     public List<QuestData> SavedQuests { get; set; } = new();
+    public DateTime? LastDailyQuestSelectionDate { get; set; }
+    public List<ulong> CurrentDailyQuestIds { get; set; } = new();
 
     // Quest Tracker settings
     public bool ShowQuestTracker { get; set; } = true;
