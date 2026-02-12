@@ -3,6 +3,9 @@ using Dalamud.Bindings.ImGui;
 using SocialMorpho.Data;
 using System.IO;
 using System.Numerics;
+using System.Collections.Generic;
+using System.Linq;
+using System;
 
 namespace SocialMorpho.Windows;
 
@@ -19,13 +22,15 @@ public class QuestTrackerWindow : Window
     private bool HasCustomQuestIcon;
 
     // FFXIV color scheme
-    private readonly Vector4 FFXIVGold = new(0.83f, 0.69f, 0.22f, 1.0f);      // #D4AF37
-    private readonly Vector4 FFXIVCyan = new(0.0f, 0.81f, 0.82f, 1.0f);       // #00CED1
+    private readonly Vector4 FFXIVWhite = new(1.0f, 1.0f, 1.0f, 1.0f);
+    private readonly Vector4 FFXIVGoldHalo = new(0.98f, 0.80f, 0.40f, 0.85f);
+    private readonly Vector4 FFXIVBlueHalo = new(0.20f, 0.90f, 1.0f, 0.85f);
 
     public QuestTrackerWindow(Plugin plugin, QuestManager questManager)
         : base("Quest Tracker##SocialMorphoTracker",
                ImGuiWindowFlags.NoTitleBar |
                ImGuiWindowFlags.NoResize |
+               ImGuiWindowFlags.NoBackground |
                ImGuiWindowFlags.NoFocusOnAppearing)
     {
         Plugin = plugin;
@@ -38,7 +43,7 @@ public class QuestTrackerWindow : Window
         SizeCondition = ImGuiCond.FirstUseEver;
 
         // Semi-transparent background
-        BgAlpha = 0.75f;
+        BgAlpha = 0.0f;
     }
 
     private void LoadCustomIcon()
@@ -66,10 +71,16 @@ public class QuestTrackerWindow : Window
                 return;
             }
 
-            var loadImageMethod = Plugin.PluginInterface.UiBuilder.GetType().GetMethod("LoadImage", new[] { typeof(string) });
+            var uiBuilderType = Plugin.PluginInterface.UiBuilder.GetType();
+            var loadImageMethod = uiBuilderType
+                .GetMethods()
+                .FirstOrDefault(m => m.Name == "LoadImage"
+                    && m.GetParameters().Length == 1
+                    && m.GetParameters()[0].ParameterType == typeof(string));
+
             if (loadImageMethod == null)
             {
-                Plugin.PluginLog.Warning("UiBuilder.LoadImage() is not available in this Dalamud version");
+                Plugin.PluginLog.Warning($"UiBuilder.LoadImage(string) is not available in this Dalamud version ({uiBuilderType.FullName})");
                 return;
             }
 
@@ -80,8 +91,7 @@ public class QuestTrackerWindow : Window
                 return;
             }
 
-            var handleProperty = CustomQuestIcon.GetType().GetProperty("ImGuiHandle");
-            if (handleProperty?.GetValue(CustomQuestIcon) is ImTextureID textureHandle)
+            if (TryExtractTextureHandle(CustomQuestIcon, out var textureHandle))
             {
                 CustomQuestIconHandle = textureHandle;
                 HasCustomQuestIcon = true;
@@ -89,7 +99,7 @@ public class QuestTrackerWindow : Window
             }
             else
             {
-                Plugin.PluginLog.Warning($"Loaded icon did not expose ImGuiHandle for path: {iconPath}");
+                Plugin.PluginLog.Warning($"Loaded icon did not expose a usable texture handle for path: {iconPath}");
             }
         }
         catch (Exception ex)
@@ -130,30 +140,14 @@ public class QuestTrackerWindow : Window
     {
         DrawCustomIcon();
 
-        ImGui.PushStyleColor(ImGuiCol.Text, FFXIVGold);
-        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + TitleWrapWidth);
-        ImGui.TextUnformatted(quest.Title);
-        ImGui.PopTextWrapPos();
-        ImGui.PopStyleColor();
+        DrawHaloWrappedText(quest.Title, TitleWrapWidth, FFXIVWhite, FFXIVGoldHalo);
 
         ImGui.Indent(20f);
-
-        ImGui.PushStyleColor(ImGuiCol.Text, FFXIVCyan);
-        ImGui.Text("\u25BA");
-        ImGui.SameLine(0f, 6f);
-
         var objectiveText = !string.IsNullOrEmpty(quest.Description)
             ? quest.Description
             : $"Complete {quest.GoalCount} objectives";
-
-        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + ObjectiveWrapWidth);
-        ImGui.TextUnformatted(objectiveText);
-        ImGui.PopTextWrapPos();
-        ImGui.PopStyleColor();
-
-        ImGui.PushStyleColor(ImGuiCol.Text, FFXIVCyan);
-        ImGui.Text($"({quest.CurrentCount}/{quest.GoalCount})");
-        ImGui.PopStyleColor();
+        var objectiveLine = $"{objectiveText}  {quest.CurrentCount}/{quest.GoalCount}";
+        DrawHaloWrappedText(objectiveLine, ObjectiveWrapWidth, FFXIVWhite, FFXIVBlueHalo);
 
         ImGui.Unindent(20f);
         ImGui.Spacing();
@@ -191,6 +185,114 @@ public class QuestTrackerWindow : Window
 
         ImGui.TextColored(new Vector4(1.0f, 0.84f, 0.0f, 1.0f), "!");
         ImGui.SameLine(0f, 6f);
+    }
+
+    private void DrawHaloWrappedText(string text, float wrapWidth, Vector4 textColor, Vector4 haloColor)
+    {
+        var lines = WrapText(text, wrapWidth);
+        var drawList = ImGui.GetWindowDrawList();
+        var start = ImGui.GetCursorScreenPos();
+        var lineHeight = ImGui.GetTextLineHeight();
+        var main = ImGui.ColorConvertFloat4ToU32(textColor);
+        var halo = ImGui.ColorConvertFloat4ToU32(haloColor);
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            var linePos = new Vector2(start.X, start.Y + (i * lineHeight));
+            drawList.AddText(new Vector2(linePos.X - 1, linePos.Y), halo, lines[i]);
+            drawList.AddText(new Vector2(linePos.X + 1, linePos.Y), halo, lines[i]);
+            drawList.AddText(new Vector2(linePos.X, linePos.Y - 1), halo, lines[i]);
+            drawList.AddText(new Vector2(linePos.X, linePos.Y + 1), halo, lines[i]);
+            drawList.AddText(linePos, main, lines[i]);
+        }
+
+        ImGui.Dummy(new Vector2(wrapWidth, lines.Count * lineHeight));
+    }
+
+    private List<string> WrapText(string text, float maxWidth)
+    {
+        var result = new List<string>();
+        var words = text.Split(' ');
+        var current = string.Empty;
+
+        foreach (var word in words)
+        {
+            var candidate = string.IsNullOrEmpty(current) ? word : $"{current} {word}";
+            if (ImGui.CalcTextSize(candidate).X <= maxWidth || string.IsNullOrEmpty(current))
+            {
+                current = candidate;
+            }
+            else
+            {
+                result.Add(current);
+                current = word;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(current))
+            result.Add(current);
+
+        if (result.Count == 0)
+            result.Add(string.Empty);
+
+        return result;
+    }
+
+    private bool TryExtractTextureHandle(object imageObject, out ImTextureID handle)
+    {
+        handle = default;
+
+        // Common property names in different Dalamud versions/wrappers.
+        var candidateProperties = new[] { "ImGuiHandle", "Handle", "TextureHandle" };
+        foreach (var propertyName in candidateProperties)
+        {
+            var property = imageObject.GetType().GetProperty(propertyName);
+            if (property == null)
+                continue;
+
+            var value = property.GetValue(imageObject);
+            if (TryConvertToImTextureId(value, out handle))
+                return true;
+        }
+
+        // Some APIs may return the handle directly.
+        if (TryConvertToImTextureId(imageObject, out handle))
+            return true;
+
+        return false;
+    }
+
+    private bool TryConvertToImTextureId(object? value, out ImTextureID handle)
+    {
+        handle = default;
+        if (value == null)
+            return false;
+
+        switch (value)
+        {
+            case ImTextureID id:
+                handle = id;
+                return true;
+            case ulong ul:
+                handle = (ImTextureID)ul;
+                return ul != 0;
+            case uint ui:
+                handle = (ImTextureID)(ulong)ui;
+                return ui != 0;
+            case int i:
+                if (i <= 0) return false;
+                handle = (ImTextureID)(ulong)i;
+                return true;
+            case IntPtr ptr:
+                {
+                    var raw = ptr.ToInt64();
+                    if (raw <= 0) return false;
+                    handle = (ImTextureID)(ulong)raw;
+                    return true;
+                }
+            default:
+                return false;
+        }
     }
 
     public void Dispose()
