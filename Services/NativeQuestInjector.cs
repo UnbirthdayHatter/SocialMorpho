@@ -37,6 +37,7 @@ public unsafe class NativeQuestInjector : IDisposable
     // Caching for optimization
     private List<QuestData>? LastActiveQuests = null;
     private int OriginalQuestCount = 0;
+    private bool HasCapturedOriginalCount = false;
     
     public NativeQuestInjector(Plugin plugin, QuestManager questManager)
     {
@@ -89,9 +90,10 @@ public unsafe class NativeQuestInjector : IDisposable
         
         // Get current native quest count and store it
         int nativeQuestCount = numberArray->IntArray[QuestCountOffset];
-        if (OriginalQuestCount == 0)
+        if (!HasCapturedOriginalCount)
         {
             OriginalQuestCount = nativeQuestCount;
+            HasCapturedOriginalCount = true;
         }
         
         // If no custom quests, restore original state
@@ -193,9 +195,10 @@ public unsafe class NativeQuestInjector : IDisposable
             OriginalStringPointers.Clear();
             
             // Restore original quest count
-            if (OriginalQuestCount > 0)
+            if (HasCapturedOriginalCount)
             {
                 numberArray->IntArray[QuestCountOffset] = OriginalQuestCount;
+                HasCapturedOriginalCount = false;
             }
             
             // Free our allocated strings
