@@ -51,7 +51,13 @@ jobs:
           # Copy plugin files
           Copy-Item "$outputDir/SocialMorpho.dll" -Destination $releaseDir
           Copy-Item "SocialMorpho.json" -Destination $releaseDir
-          Copy-Item "manifest.json" -Destination $releaseDir -ErrorAction SilentlyContinue
+          
+          # Copy manifest.json if it exists
+          if (Test-Path "manifest.json") {
+            Copy-Item "manifest.json" -Destination $releaseDir
+          } else {
+            Write-Host "Warning: manifest.json not found"
+          }
           
           # Copy Quests.json if it exists
           if (Test-Path "$outputDir/Quests.json") {
@@ -67,7 +73,7 @@ jobs:
       
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2.0.3
         with:
           name: Social Morpho ${{ steps.get_version.outputs.VERSION }}
           body: |
