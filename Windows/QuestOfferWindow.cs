@@ -71,8 +71,9 @@ public class QuestOfferWindow : Window, IDisposable
         // Draw the content image first so the frame sits on top of it.
         if (this.offerImage != null)
         {
-            var contentStart = frameStart + new Vector2(frameSize.X * 0.104f, frameSize.Y * 0.274f);
-            var contentEnd = frameStart + new Vector2(frameSize.X * 0.896f, frameSize.Y * 0.514f);
+            // Fill the frame slot directly (stretch) to avoid any bottom/side gaps.
+            var contentStart = frameStart + new Vector2(frameSize.X * 0.100f, frameSize.Y * 0.274f);
+            var contentEnd = frameStart + new Vector2(frameSize.X * 0.900f, frameSize.Y * 0.545f);
             this.TryDrawTexture(this.offerImage, contentStart, contentEnd);
         }
 
@@ -100,9 +101,9 @@ public class QuestOfferWindow : Window, IDisposable
         var blackTextVec = new Vector4(0.10f, 0.10f, 0.10f, 1f);
         this.DrawScaledText(titleText, new Vector2(titleX, titleY), blackTextVec, titleScale);
 
-        var textLeft = frameStart.X + (frameSize.X * 0.13f);
+        var textLeft = frameStart.X + (frameSize.X * 0.10f);
         var textTop = frameStart.Y + (frameSize.Y * 0.61f);
-        var textWidth = frameSize.X * 0.74f;
+        var textWidth = frameSize.X * 0.80f;
         var textBottom = frameStart.Y + (frameSize.Y * 0.865f);
         var textLineHeight = ImGui.GetTextLineHeightWithSpacing() * descBodyScale;
         var descriptionTitle = "Description";

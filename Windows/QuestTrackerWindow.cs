@@ -11,7 +11,7 @@ namespace SocialMorpho.Windows;
 
 public class QuestTrackerWindow : Window
 {
-    private const float ContainerWidth = 300f;
+    private const float ContainerWidth = 370f;
     private const float IconSize = 28f;
     private const float IconGap = 2f;
     private const float RightPadding = 10f;
@@ -116,7 +116,7 @@ public class QuestTrackerWindow : Window
         var iconWidth = this.CustomQuestIcon != null ? IconSize : 12f;
         var textRightEdge = rightEdge - iconWidth - IconGap;
         var maxTextWidth = MathF.Max(60f, textRightEdge - leftEdge);
-        var objectiveRightEdge = textRightEdge - 10f;
+        var objectiveRightEdge = textRightEdge - 4f;
         var maxObjectiveWidth = MathF.Max(50f, objectiveRightEdge - leftEdge);
 
         const float titleScale = 1.10f;
