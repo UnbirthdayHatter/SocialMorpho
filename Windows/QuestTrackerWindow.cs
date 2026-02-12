@@ -8,6 +8,10 @@ namespace SocialMorpho.Windows;
 
 public class QuestTrackerWindow : Window
 {
+    private const float TrackerWidth = 380f;
+    private const float TitleWrapWidth = 320f;
+    private const float ObjectiveWrapWidth = 300f;
+
     private Plugin Plugin;
     private QuestManager QuestManager;
     private object? CustomQuestIcon;
@@ -22,7 +26,6 @@ public class QuestTrackerWindow : Window
         : base("Quest Tracker##SocialMorphoTracker",
                ImGuiWindowFlags.NoTitleBar |
                ImGuiWindowFlags.NoResize |
-               ImGuiWindowFlags.AlwaysAutoResize |
                ImGuiWindowFlags.NoFocusOnAppearing)
     {
         Plugin = plugin;
@@ -31,6 +34,8 @@ public class QuestTrackerWindow : Window
 
         // Position will be set in PreDraw to ensure accurate screen size
         PositionCondition = ImGuiCond.FirstUseEver;
+        Size = new Vector2(TrackerWidth, 0f);
+        SizeCondition = ImGuiCond.FirstUseEver;
 
         // Semi-transparent background
         BgAlpha = 0.75f;
@@ -126,7 +131,9 @@ public class QuestTrackerWindow : Window
         DrawCustomIcon();
 
         ImGui.PushStyleColor(ImGuiCol.Text, FFXIVGold);
-        ImGui.TextWrapped(quest.Title);
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + TitleWrapWidth);
+        ImGui.TextUnformatted(quest.Title);
+        ImGui.PopTextWrapPos();
         ImGui.PopStyleColor();
 
         ImGui.Indent(20f);
@@ -139,7 +146,9 @@ public class QuestTrackerWindow : Window
             ? quest.Description
             : $"Complete {quest.GoalCount} objectives";
 
-        ImGui.TextWrapped(objectiveText);
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + ObjectiveWrapWidth);
+        ImGui.TextUnformatted(objectiveText);
+        ImGui.PopTextWrapPos();
         ImGui.PopStyleColor();
 
         ImGui.PushStyleColor(ImGuiCol.Text, FFXIVCyan);

@@ -64,6 +64,11 @@ jobs:
             Copy-Item $file -Destination $releaseDir
           }
 
+          if (Test-Path "Resources/quest_icon.png") {
+            New-Item -ItemType Directory -Force -Path "$releaseDir/Resources" | Out-Null
+            Copy-Item "Resources/quest_icon.png" -Destination "$releaseDir/Resources/quest_icon.png"
+          }
+
 
           if (Test-Path "$outputDir/Quests.json") {
             Copy-Item "$outputDir/Quests.json" -Destination $releaseDir
@@ -80,7 +85,7 @@ jobs:
           $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
           try {
             $entries = @($zip.Entries | ForEach-Object { $_.FullName })
-            $required = @("SocialMorpho.dll", "SocialMorpho.json")
+            $required = @("SocialMorpho.dll", "SocialMorpho.json", "Resources/quest_icon.png")
 
             foreach ($file in $required) {
               if ($entries -notcontains $file) {
@@ -159,6 +164,7 @@ jobs:
           unzip -l latest.zip
           unzip -Z1 latest.zip | grep -qx "SocialMorpho.dll"
           unzip -Z1 latest.zip | grep -qx "SocialMorpho.json"
+          unzip -Z1 latest.zip | grep -qx "Resources/quest_icon.png"
           if unzip -Z1 latest.zip | grep -qx "latest.zip"; then
             echo "Invalid latest.zip: nested latest.zip found"
             exit 1
