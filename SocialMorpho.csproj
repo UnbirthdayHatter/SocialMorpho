@@ -1,54 +1,55 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>SocialMorpho</AssemblyName>
+    <RootNamespace>SocialMorpho</RootNamespace>
+    <Version>1.1.0</Version>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>x64</Platforms>
+    <OutputType>Library</OutputType>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
 
-	<PropertyGroup>
-		<AssemblyName>SocialMorpho</AssemblyName>
-		<RootNamespace>SocialMorpho</RootNamespace>
-		<Version>1.0.0.0</Version>
-		<LangVersion>latest</LangVersion>
-		<Nullable>enable</Nullable>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<TargetFramework>net10.0-windows</TargetFramework>
-		<PlatformTarget>x64</PlatformTarget>
-		<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
-		<Platforms>x64</Platforms>
-		<DalamudLibPath>C:\Users\unbir\AppData\Roaming\XIVLauncher\addon\Hooks\14.0.2.1\</DalamudLibPath>
+  <PropertyGroup>
+    <DalamudLibPath>$(appdata)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
+  </PropertyGroup>
 
-		<!-- Disable NuGet auto-packager -->
-		<DalamudPackagerEnabled>false</DalamudPackagerEnabled>
-	</PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DalamudPackager" Version="2.1.13" />
+    <Reference Include="FFXIVClientStructs">
+      <HintPath>$(DalamudLibPath)FFXIVClientStructs.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(DalamudLibPath)Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Dalamud">
+      <HintPath>$(DalamudLibPath)Dalamud.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ImGui.NET">
+      <HintPath>$(DalamudLibPath)ImGui.NET.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ImGuiScene">
+      <HintPath>$(DalamudLibPath)ImGuiScene.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Lumina">
+      <HintPath>$(DalamudLibPath)Lumina.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Lumina.Excel">
+      <HintPath>$(DalamudLibPath)Lumina.Excel.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
 
-	<ItemGroup>
-		<Reference Include="Dalamud.Bindings.ImGui">
-			<HintPath>$(DalamudLibPath)Dalamud.Bindings.ImGui.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="Dalamud">
-			<HintPath>$(DalamudLibPath)Dalamud.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="Lumina">
-			<HintPath>$(DalamudLibPath)Lumina.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="Lumina.Excel">
-			<HintPath>$(DalamudLibPath)Lumina.Excel.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-	</ItemGroup>
-
-	<!-- Manual packager task -->
-	<UsingTask TaskName="DalamudPackager"
-			   AssemblyFile="$(UserProfile)\.nuget\packages\dalamudpackager\14.0.1\tasks\net48\DalamudPackager.dll" />
-
-	<!-- Release-only packaging -->
-	<Target Name="PackagePluginRelease" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
-		<Message Importance="High" Text="Running manual DalamudPackager with ProjectDir=$(MSBuildProjectDirectory)" />
-		<Message Importance="High" Text="OutputPath=$(OutputPath)" />
-		<DalamudPackager
-  ProjectDir="$(MSBuildProjectDirectory)\"
-  OutputPath="$(OutputPath)"
-  AssemblyName="$(AssemblyName)"
-  MakeZip="true" />
-	</Target>
-
+  <Target Name="PackagePlugin" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <DalamudPackager ProjectDir="$(ProjectDir)" OutputPath="$(OutputPath)" AssemblyName="$(AssemblyName)" MakeZip="true" />
+  </Target>
 </Project>

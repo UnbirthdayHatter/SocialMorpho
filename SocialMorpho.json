@@ -1,10 +1,14 @@
 {
   "Author": "UnbirthdayHatter",
-  "Name": "SocialMorpho",
+  "Name": "Social Morpho",
   "InternalName": "SocialMorpho",
-  "Punchline": "A short one-line description of what the plugin does.",
-  "Description": "A longer, more detailed explanation of the plugin's functionality and features.",
+  "AssemblyVersion": "1.1.0",
+  "Description": "Track social quests and interactions in FFXIV with an immersive quest system.",
   "ApplicableVersion": "any",
-  "RepoUrl": "https://github.com/UnbirthdayHatter/SocialMorpho",
-  "IsHide": false
+  "DalamudApiLevel": 10,
+  "LoadRequiredState": 0,
+  "LoadSync": false,
+  "LoadPriority": 0,
+  "Punchline": "Social interaction quest tracking for FFXIV.",
+  "RepoUrl": "https://github.com/UnbirthdayHatter/SocialMorpho"
 }

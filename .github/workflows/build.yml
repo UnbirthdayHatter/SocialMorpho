@@ -9,24 +9,33 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: true
     
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '7.0.x'
+        dotnet-version: '8.0.x'
+    
+    - name: Download Dalamud
+      run: |
+        Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile latest.zip
+        Expand-Archive -Force latest.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
     
     - name: Restore dependencies
       run: dotnet restore
     
     - name: Build Release
-      run: dotnet build -c Release
+      run: dotnet build -c Release --no-restore
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: SocialMorpho
-        path: bin/Release/
+        path: |
+          bin/Release/net8.0-windows/*
+          !bin/Release/net8.0-windows/*.pdb
