@@ -1,6 +1,5 @@
 using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.Internal;
 using SocialMorpho.Data;
 using System.IO;
 using System.Numerics;
@@ -12,7 +11,7 @@ public class QuestTrackerWindow : Window
 {
     private Plugin Plugin;
     private QuestManager QuestManager;
-    private IDalamudTextureWrap? CustomQuestIcon;
+    private nint CustomQuestIconHandle = 0;
 
     // FFXIV color scheme
     private readonly Vector4 FFXIVGold = new(0.83f, 0.69f, 0.22f, 1.0f);      // #D4AF37
@@ -61,8 +60,12 @@ public class QuestTrackerWindow : Window
 
             if (File.Exists(iconPath))
             {
-                CustomQuestIcon = Plugin.PluginInterface.UiBuilder.LoadImage(iconPath);
-                Plugin.PluginLog.Info($"Custom quest icon loaded from: {iconPath}");
+                var texture = Plugin.PluginInterface.UiBuilder.LoadImage(iconPath);
+                if (texture != null)
+                {
+                    CustomQuestIconHandle = texture.ImGuiHandle;
+                    Plugin.PluginLog.Info($"Custom quest icon loaded from: {iconPath}");
+                }
             }
             else
             {
@@ -166,14 +169,14 @@ public class QuestTrackerWindow : Window
 
     private void DrawCustomIcon()
     {
-        if (CustomQuestIcon != null)
+        if (CustomQuestIconHandle != 0)
         {
             var pos = ImGui.GetCursorScreenPos();
             var drawList = ImGui.GetWindowDrawList();
             
             // Draw icon shadow (subtle black shadow behind)
             drawList.AddImage(
-                CustomQuestIcon.ImGuiHandle,
+                CustomQuestIconHandle,
                 new Vector2(pos.X + 1, pos.Y + 1),
                 new Vector2(pos.X + 21, pos.Y + 21),
                 Vector2.Zero,
@@ -182,7 +185,7 @@ public class QuestTrackerWindow : Window
             );
             
             // Draw main icon
-            ImGui.Image(CustomQuestIcon.ImGuiHandle, new Vector2(20, 20));
+            ImGui.Image(CustomQuestIconHandle, new Vector2(20, 20));
             ImGui.SameLine();
         }
         else
@@ -216,6 +219,6 @@ public class QuestTrackerWindow : Window
 
     public void Dispose()
     {
-        CustomQuestIcon?.Dispose();
+        // ImGui handles are managed by Dalamud, no explicit disposal needed
     }
 }
