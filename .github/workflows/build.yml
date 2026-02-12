@@ -1,124 +1,109 @@
-name: Build Social Morpho
+﻿name: Build Social Morpho
 
 on:
   push:
     branches: [ main, develop ]
-    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
 jobs:
   build:
     runs-on: windows-latest
-    
+
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: true
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '10.0.x'
-      
-    - name: Download Dalamud
-      shell: pwsh
-      run: |
-        $dalamudPath = "$env:AppData\XIVLauncher\addon\Hooks\14.0.2.1"
-        New-Item -ItemType Directory -Force -Path $dalamudPath
-        
-        $url = "https://github.com/goatcorp/dalamud-distrib/raw/main/latest.zip"
-        Invoke-WebRequest -Uri $url -OutFile "dalamud.zip"
-        Expand-Archive -Force "dalamud.zip" $dalamudPath
-        
-        $dalamudDll = Join-Path $dalamudPath "Dalamud.dll"
-        if (Test-Path $dalamudDll) {
-          Write-Host "✅ Dalamud.dll found"
-          $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($dalamudDll)
-          Write-Host "Dalamud Version: $($version.FileVersion)"
-        } else {
-          Write-Error "❌ Dalamud.dll not found!"
-          exit 1
-        }
-        
-    - name: Restore dependencies
-      run: dotnet restore
-    
-    - name: Build Release
-      run: dotnet build -c Release --no-restore
-    
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: SocialMorpho
-        path: |
-          bin/Release/net10.0-windows/*
-          !bin/Release/net10.0-windows/*.pdb
-  
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download Dalamud
+        shell: pwsh
+        run: |
+          $dalamudPath = "$env:AppData\XIVLauncher\addon\Hooks\14.0.2.1"
+          New-Item -ItemType Directory -Force -Path $dalamudPath | Out-Null
+
+          $url = "https://github.com/goatcorp/dalamud-distrib/raw/main/latest.zip"
+          Invoke-WebRequest -Uri $url -OutFile "dalamud.zip"
+          Expand-Archive -Force "dalamud.zip" $dalamudPath
+
+          $dalamudDll = Join-Path $dalamudPath "Dalamud.dll"
+          if (-not (Test-Path $dalamudDll)) {
+            Write-Error "Dalamud.dll not found after download"
+            exit 1
+          }
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build Release
+        run: dotnet build SocialMorpho.csproj -c Release --no-restore
+
+      - name: Create latest.zip
+        shell: pwsh
+        run: |
+          $outputDir = "bin/Release/net10.0-windows"
+          $releaseDir = "release"
+          Remove-Item -Recurse -Force $releaseDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+
+          $required = @(
+            "$outputDir/SocialMorpho.dll",
+            "$outputDir/SocialMorpho.json"
+          )
+
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) {
+              Write-Error "Missing required build output: $file"
+              exit 1
+            }
+            Copy-Item $file -Destination $releaseDir
+          }
+
+          if (Test-Path "manifest.json") {
+            Copy-Item "manifest.json" -Destination $releaseDir
+          }
+
+          if (Test-Path "$outputDir/Quests.json") {
+            Copy-Item "$outputDir/Quests.json" -Destination $releaseDir
+          }
+
+          Compress-Archive -Path "$releaseDir/*" -DestinationPath "latest.zip" -Force
+          Get-ChildItem latest.zip | Format-List Name,Length
+
+      - name: Upload latest.zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-zip
+          path: latest.zip
+          if-no-files-found: error
+
   release:
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
-    
+
     steps:
-    - uses: actions/checkout@v4
-      with:
-        sparse-checkout: |
-          SocialMorpho.csproj
-    
-    - name: Extract version from csproj
-      id: version
-      shell: bash
-      run: |
-        VERSION=$(grep -oP '<Version>\K[^<]+' SocialMorpho.csproj)
-        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-        echo "Version extracted: ${VERSION}"
-    
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: SocialMorpho
-        path: ./artifacts
-    
-    - name: Create release zip
-      shell: bash
-      run: |
-        cd artifacts
-        # Find the zip file created by DalamudPackager (should be in root of artifacts)
-        if [ -f "latest.zip" ]; then
-          cp latest.zip ../SocialMorpho-v${{ steps.version.outputs.version }}.zip
-          echo "Found latest.zip in artifacts root"
-        elif [ -f "SocialMorpho/latest.zip" ]; then
-          cp SocialMorpho/latest.zip ../SocialMorpho-v${{ steps.version.outputs.version }}.zip
-          echo "Found latest.zip in SocialMorpho subdirectory"
-        else
-          echo "No latest.zip found, listing artifacts:"
-          find . -type f -name "*.zip" || echo "No zip files found"
-          ls -laR
-          exit 1
-        fi
-        cd ..
-        ls -lh SocialMorpho-v${{ steps.version.outputs.version }}.zip
-    
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
-      with:
-        tag_name: v${{ steps.version.outputs.version }}
-        name: Release v${{ steps.version.outputs.version }}
-        body: |
-          ## SocialMorpho v${{ steps.version.outputs.version }}
-          
-          Automatic release created from main branch.
-          
-          ### Installation
-          1. Download the `SocialMorpho-v${{ steps.version.outputs.version }}.zip` file
-          2. Extract to your Dalamud plugins directory
-          3. Enable the plugin in Dalamud
-          
-          See [README.md](https://github.com/UnbirthdayHatter/SocialMorpho/blob/main/README.md) for more information.
-        files: |
-          SocialMorpho-v${{ steps.version.outputs.version }}.zip
-        draft: false
-        prerelease: false
+      - name: Download latest.zip artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: latest-zip
+          path: .
+
+      - name: Publish or update latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Build
+          body: |
+            Automated release from `${{ github.ref_name }}`.
+            Commit: `${{ github.sha }}`
+          files: latest.zip
+          draft: false
+          prerelease: true
