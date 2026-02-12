@@ -5,6 +5,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using SocialMorpho.Data;
 using SocialMorpho.Windows;
+using SocialMorpho.Services;
 
 namespace SocialMorpho;
 
@@ -14,20 +15,32 @@ public sealed class Plugin : IDalamudPlugin
     private const string CommandName = "/morpho";
     private const string CommandNameAlt = "/sm";
 
-    private IDalamudPluginInterface PluginInterface { get; init; }
+    public IDalamudPluginInterface PluginInterface { get; init; }
     private ICommandManager CommandManager { get; init; }
+    private IClientState ClientState { get; init; }
+    private IChatGui ChatGui { get; init; }
+    private IPluginLog PluginLog { get; init; }
+    
     public Configuration Configuration { get; init; }
     public WindowSystem WindowSystem = new("SocialMorpho");
 
     private MainWindow MainWindow { get; init; }
-    private QuestManager QuestManager { get; init; }
+    private QuestTrackerWindow QuestTrackerWindow { get; init; }
+    public QuestManager QuestManager { get; init; }
+    private QuestNotificationService QuestNotificationService { get; init; }
 
     public Plugin(
         IDalamudPluginInterface pluginInterface,
-        ICommandManager commandManager)
+        ICommandManager commandManager,
+        IClientState clientState,
+        IChatGui chatGui,
+        IPluginLog pluginLog)
     {
         PluginInterface = pluginInterface;
         CommandManager = commandManager;
+        ClientState = clientState;
+        ChatGui = chatGui;
+        PluginLog = pluginLog;
 
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
@@ -39,9 +52,28 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         QuestManager = new QuestManager(Configuration);
+        
+        // Load quests from JSON file
+        try
+        {
+            QuestManager.LoadQuestsFromJson(PluginInterface.ConfigDirectory.FullName);
+            PluginLog.Info("Quests loaded from JSON successfully");
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error($"Error loading quests from JSON: {ex.Message}");
+        }
+
+        // Check and reset quests based on schedule
+        QuestManager.CheckAndResetQuests();
+
+        QuestNotificationService = new QuestNotificationService(this, ClientState, ChatGui, PluginLog);
+
         MainWindow = new MainWindow(this, QuestManager);
+        QuestTrackerWindow = new QuestTrackerWindow(this, QuestManager);
 
         WindowSystem.AddWindow(MainWindow);
+        WindowSystem.AddWindow(QuestTrackerWindow);
 
         // Register commands
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
@@ -56,6 +88,8 @@ public sealed class Plugin : IDalamudPlugin
         // Subscribe to draw event
         PluginInterface.UiBuilder.Draw += DrawUI;
         PluginInterface.UiBuilder.OpenConfigUi += DrawConfigUI;
+
+        PluginLog.Info("Social Morpho initialized successfully");
     }
 
     private void InitializeDefaultQuests()
@@ -94,6 +128,7 @@ public sealed class Plugin : IDalamudPlugin
         });
 
         Configuration.Save();
+        PluginLog.Info("Default quests initialized");
     }
 
     private void DrawUI()
@@ -120,5 +155,9 @@ public sealed class Plugin : IDalamudPlugin
 
         PluginInterface.UiBuilder.Draw -= DrawUI;
         PluginInterface.UiBuilder.OpenConfigUi -= DrawConfigUI;
+
+        QuestNotificationService?.Dispose();
+
+        PluginLog.Info("Social Morpho disposed");
     }
 }

@@ -14,6 +14,8 @@ public class QuestData
     public bool Completed { get; set; } = false;
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime? CompletedAt { get; set; }
+    public ResetSchedule ResetSchedule { get; set; } = ResetSchedule.None;
+    public DateTime? LastResetDate { get; set; }
 }
 
 public enum QuestType
@@ -22,4 +24,11 @@ public enum QuestType
     Buff,
     Emote,
     Custom
+}
+
+public enum ResetSchedule
+{
+    None,
+    Daily,
+    Weekly
 }
