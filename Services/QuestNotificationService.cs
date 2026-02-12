@@ -43,6 +43,10 @@ public class QuestNotificationService : IDisposable
             if (Plugin.Configuration.ShowQuestTrackerOnLogin)
             {
                 Plugin.Configuration.ShowQuestTracker = true;
+                if (Plugin.QuestTrackerWindow != null)
+                {
+                    Plugin.QuestTrackerWindow.IsOpen = true;
+                }
             }
         }
         catch (Exception ex)

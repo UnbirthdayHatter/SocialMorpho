@@ -115,12 +115,15 @@ Each quest has the following actions:
 
 
 
-The quest tracker overlay displays active quests on the right side of your screen, similar to FFXIV's native quest tracker. Features include:
+The quest tracker overlay displays active quests in the top-right corner of your screen with FFXIV-native styling, making it look exactly like FFXIV's native quest tracker. Features include:
 
 - Shows only incomplete quests
-- Displays quest title and progress (e.g., "3/5")
-- Color-coded progress bars (Green=Complete, Yellow=In Progress, Gray=Not Started)
-- Semi-transparent background that blends with the game UI
+- **FFXIV-style golden quest titles** (#D4AF37)
+- **Cyan objective text** (#00CED1) with arrow symbols (►)
+- **Quest type indicator symbols**: ● (Social), ◆ (Buff), ■ (Emote), ★ (Custom)
+- Color-coded progress bars (Cyan=In Progress, Green=Complete, Gray=Not Started)
+- Semi-transparent background (75% opacity) that blends seamlessly with the game UI
+- No title bar, auto-sized to content
 - Can be toggled on/off in settings
 
 ### Configuration

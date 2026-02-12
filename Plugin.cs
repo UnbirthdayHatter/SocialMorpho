@@ -25,6 +25,7 @@ public sealed class Plugin : IDalamudPlugin
     public WindowSystem WindowSystem = new("SocialMorpho");
 
     private MainWindow MainWindow { get; init; }
+    public QuestTrackerWindow QuestTrackerWindow { get; init; }
     private NativeQuestInjector QuestInjector { get; init; }
     public QuestManager QuestManager { get; init; }
     private QuestNotificationService QuestNotificationService { get; init; }
@@ -70,9 +71,17 @@ public sealed class Plugin : IDalamudPlugin
         QuestNotificationService = new QuestNotificationService(this, ClientState, ChatGui, PluginLog);
 
         MainWindow = new MainWindow(this, QuestManager);
+        QuestTrackerWindow = new QuestTrackerWindow(this, QuestManager);
         QuestInjector = new NativeQuestInjector(this, QuestManager);
 
         WindowSystem.AddWindow(MainWindow);
+        WindowSystem.AddWindow(QuestTrackerWindow);
+        
+        // Show quest tracker if configured
+        if (Configuration.ShowQuestTracker)
+        {
+            QuestTrackerWindow.IsOpen = true;
+        }
 
         // Register commands
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)

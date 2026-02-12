@@ -21,7 +21,26 @@ jobs:
       with:
         dotnet-version: '10.0.x'
       
-                   
+    - name: Download Dalamud
+      shell: pwsh
+      run: |
+        $dalamudPath = "$env:AppData\XIVLauncher\addon\Hooks\14.0.2.1"
+        New-Item -ItemType Directory -Force -Path $dalamudPath
+        
+        $url = "https://github.com/goatcorp/dalamud-distrib/raw/main/latest.zip"
+        Invoke-WebRequest -Uri $url -OutFile "dalamud.zip"
+        Expand-Archive -Force "dalamud.zip" $dalamudPath
+        
+        $dalamudDll = Join-Path $dalamudPath "Dalamud.dll"
+        if (Test-Path $dalamudDll) {
+          Write-Host "✅ Dalamud.dll found"
+          $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($dalamudDll)
+          Write-Host "Dalamud Version: $($version.FileVersion)"
+        } else {
+          Write-Error "❌ Dalamud.dll not found!"
+          exit 1
+        }
+        
     - name: Restore dependencies
       run: dotnet restore
     
