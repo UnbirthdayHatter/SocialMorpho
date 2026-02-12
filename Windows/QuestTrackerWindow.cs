@@ -77,7 +77,7 @@ public class QuestTrackerWindow : Window
             }
             else
             {
-                this.Plugin.PluginLog.Warning($"Loaded icon but could not resolve a draw handle for path: {iconPath}");
+                this.Plugin.PluginLog.Warning($"Loaded icon but could not resolve a direct draw handle for path: {iconPath}. Will try shared texture draw path.");
             }
         }
         catch (Exception ex)
@@ -356,7 +356,7 @@ public class QuestTrackerWindow : Window
             : $"Complete {quest.GoalCount} objectives";
 
         var baseCursor = ImGui.GetCursorScreenPos();
-        var rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X - 8f;
+        var rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X - 14f;
         var iconWidth = this.HasCustomQuestIcon ? 20f : 12f;
         var lineHeight = ImGui.GetTextLineHeight();
         var titleY = baseCursor.Y;
@@ -364,7 +364,7 @@ public class QuestTrackerWindow : Window
         var progressY = objectiveY + lineHeight + 1f;
         var nextEntryY = progressY + lineHeight + 6f;
 
-        const float titleScale = 1.02f;
+        const float titleScale = 1.05f;
         var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - 6f, titleY, titleScale);
         this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos, titleScale);
         this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
@@ -384,6 +384,8 @@ public class QuestTrackerWindow : Window
     {
         var textSize = ImGui.CalcTextSize(text) * scale;
         var leftX = MathF.Max(ImGui.GetWindowPos().X + 6f, rightEdgeX - textSize.X);
+        leftX = MathF.Round(leftX);
+        y = MathF.Round(y);
         ImGui.SetCursorScreenPos(new Vector2(leftX, y));
         return new Vector2(leftX, y);
     }
@@ -415,6 +417,8 @@ public class QuestTrackerWindow : Window
             }
         }
 
+        x = MathF.Round(x);
+        y = MathF.Round(y);
         ImGui.SetCursorScreenPos(new Vector2(x, y));
         if (this.HasCustomQuestIcon)
         {
@@ -422,9 +426,48 @@ public class QuestTrackerWindow : Window
             return;
         }
 
+        if (this.CustomQuestIcon != null && this.TryDrawSharedIcon(this.CustomQuestIcon, new Vector2(x, y), new Vector2(20, 20)))
+            return;
+
         var pos = ImGui.GetCursorScreenPos();
         var drawList = ImGui.GetWindowDrawList();
         drawList.AddText(pos, ImGui.ColorConvertFloat4ToU32(this.FFXIVGold), "!");
+    }
+
+    private bool TryDrawSharedIcon(object textureObject, Vector2 min, Vector2 size)
+    {
+        try
+        {
+            var dalamudAssembly = this.Plugin.PluginInterface.UiBuilder.GetType().Assembly;
+            var utilType = dalamudAssembly.GetType("Dalamud.Interface.ImGuiNotification.NotificationUtilities");
+            if (utilType == null)
+                return false;
+
+            var methods = utilType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                .Where(m => m.Name == "DrawIconFrom")
+                .ToArray();
+            foreach (var method in methods)
+            {
+                var p = method.GetParameters();
+                if (p.Length != 3 ||
+                    p[0].ParameterType != typeof(Vector2) ||
+                    p[1].ParameterType != typeof(Vector2))
+                {
+                    continue;
+                }
+
+                if (!p[2].ParameterType.IsInstanceOfType(textureObject))
+                    continue;
+
+                method.Invoke(null, new object[] { min, size, textureObject });
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
     }
 
     public void Dispose()
