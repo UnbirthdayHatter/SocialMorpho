@@ -20,27 +20,7 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '10.0.x'
-    
-    - name: Download Dalamud 14.0.2.1
-      shell: pwsh
-      run: |
-        # Create the directory structure
-        $dalamudPath = "$env:AppData\XIVLauncher\addon\Hooks\dev"
-        New-Item -ItemType Directory -Force -Path $dalamudPath
-        
-        # Download the specific Dalamud version (14.0.2.1)
-        # Using the release distribution which has stable builds
-        $url = "https://goatcorp.github.io/dalamud-distrib/release/latest.zip"
-        Invoke-WebRequest -Uri $url -OutFile "dalamud.zip"
-        Expand-Archive -Force "dalamud.zip" $dalamudPath
-        
-        # List all downloaded DLLs for debugging
-        Write-Host "`n=== Downloaded Dalamud Files ==="
-        Get-ChildItem -Path $dalamudPath -Filter "*.dll" -Recurse | ForEach-Object {
-          Write-Host "  - $($_.FullName)"
-        }
-        Write-Host "================================`n"
-        
+      
         # Verify Dalamud.dll exists
         $dalamudDll = Join-Path $dalamudPath "Dalamud.dll"
         if (Test-Path $dalamudDll) {
