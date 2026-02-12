@@ -64,9 +64,6 @@ jobs:
             Copy-Item $file -Destination $releaseDir
           }
 
-          if (Test-Path "manifest.json") {
-            Copy-Item "manifest.json" -Destination $releaseDir
-          }
 
           if (Test-Path "$outputDir/Quests.json") {
             Copy-Item "$outputDir/Quests.json" -Destination $releaseDir
