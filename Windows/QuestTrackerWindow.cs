@@ -18,6 +18,8 @@ public class QuestTrackerWindow : Window, IDisposable
     private static readonly Vector4 CompleteGreen = new(0.0f, 1.0f, 0.0f, 1.0f);
     private static readonly Vector4 InProgressCyan = new(0.0f, 0.81f, 0.82f, 1.0f);
     private static readonly Vector4 NotStartedGray = new(0.5f, 0.5f, 0.5f, 1.0f);
+    
+    private bool _positionInitialized = false;
 
     public QuestTrackerWindow(Plugin plugin, QuestManager questManager) 
         : base("Quest Tracker##SocialMorphoTracker", 
@@ -30,8 +32,7 @@ public class QuestTrackerWindow : Window, IDisposable
         Plugin = plugin;
         QuestManager = questManager;
 
-        // Position in top-right area like FFXIV quest tracker
-        Position = new Vector2(ImGui.GetIO().DisplaySize.X - 350, 100);
+        // Position will be set on first draw when ImGui context is available
         PositionCondition = ImGuiCond.FirstUseEver;
         
         // Semi-transparent background
@@ -40,6 +41,13 @@ public class QuestTrackerWindow : Window, IDisposable
 
     public override void Draw()
     {
+        // Initialize position on first draw when ImGui context is available
+        if (!_positionInitialized)
+        {
+            Position = new Vector2(ImGui.GetIO().DisplaySize.X - 350, 100);
+            _positionInitialized = true;
+        }
+        
         if (!Plugin.Configuration.ShowQuestTracker)
         {
             IsOpen = false;

@@ -153,7 +153,7 @@ SocialMorpho/
 │   └── QuestLoader.cs (NEW: JSON utilities)
 ├── Services/
 │   ├── QuestNotificationService.cs (NEW: Login notifications)
-│   └── NativeQuestInjector.cs (REMOVED: Stub implementation replaced)
+│   └── NativeQuestInjector.cs (STUB: Kept for future reference with documentation comments)
 ├── Windows/
 │   ├── MainWindow.cs (UPDATED: Complete UI overhaul)
 │   └── QuestTrackerWindow.cs (NEW: FFXIV-styled quest tracker overlay)
@@ -244,12 +244,12 @@ The plugin requires Dalamud libraries which are only available in the FFXIV runt
 3. `Windows/QuestTrackerWindow.cs` - FFXIV-styled quest tracker overlay
 4. `Quests.json` - Example quest data
 
-### Removed (1 file):
-1. `Services/NativeQuestInjector.cs` - Replaced with QuestTrackerWindow (ImGui approach is more maintainable)
+### Updated to Stub (1 file):
+1. `Services/NativeQuestInjector.cs` - Converted to documented stub for future implementation reference
 
 ### Total Changes:
 - 800+ lines added
-- 100+ lines removed/replaced
+- 10+ lines modified
 - 11 files changed
 
 ## Security Considerations
