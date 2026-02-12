@@ -8,6 +8,18 @@ namespace SocialMorpho.Windows;
 
 public class QuestTrackerWindow : Window, IDisposable
 {
+    // FFXIV color constants
+    private static readonly Vector4 FFXIVGold = new Vector4(0.83f, 0.69f, 0.22f, 1.0f);
+    private static readonly Vector4 FFXIVCyan = new Vector4(0.0f, 0.81f, 0.82f, 1.0f);
+    private static readonly Vector4 FFXIVCyanAlpha = new Vector4(0.0f, 0.81f, 0.82f, 0.8f);
+    private static readonly Vector4 BrightGreen = new Vector4(0.3f, 0.9f, 0.3f, 1.0f);
+    private static readonly Vector4 DarkGray = new Vector4(0.4f, 0.4f, 0.4f, 0.6f);
+    
+    // Quest type indicator colors
+    private static readonly Vector4 SocialBlue = new Vector4(0.4f, 0.8f, 1.0f, 1.0f);
+    private static readonly Vector4 BuffGreen = new Vector4(0.8f, 1.0f, 0.4f, 1.0f);
+    private static readonly Vector4 EmoteOrange = new Vector4(1.0f, 0.8f, 0.4f, 1.0f);
+    
     private Plugin Plugin;
     private QuestManager QuestManager;
 
@@ -49,7 +61,7 @@ public class QuestTrackerWindow : Window, IDisposable
         }
 
         // FFXIV-style header with golden color
-        ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.83f, 0.69f, 0.22f, 1.0f));
+        ImGui.PushStyleColor(ImGuiCol.Text, FFXIVGold);
         ImGui.Text("Active Quests");
         ImGui.PopStyleColor();
         
@@ -77,18 +89,16 @@ public class QuestTrackerWindow : Window, IDisposable
         ImGui.SameLine();
         
         // Quest title with FFXIV golden color
-        var titleColor = new Vector4(0.83f, 0.69f, 0.22f, 1.0f); // FFXIV quest gold
-        ImGui.PushStyleColor(ImGuiCol.Text, titleColor);
+        ImGui.PushStyleColor(ImGuiCol.Text, FFXIVGold);
         ImGui.TextWrapped(quest.Title);
         ImGui.PopStyleColor();
 
         // Objective/Description text with arrow and cyan color (indented)
         ImGui.Indent(20f);
-        var objectiveColor = new Vector4(0.0f, 0.81f, 0.82f, 1.0f); // FFXIV objective cyan
-        ImGui.PushStyleColor(ImGuiCol.Text, objectiveColor);
+        ImGui.PushStyleColor(ImGuiCol.Text, FFXIVCyan);
         
         // Arrow symbol before objective
-        ImGui.Text("► " + quest.Description);
+        ImGui.Text($"► {quest.Description}");
         
         // Progress counter in cyan
         ImGui.SameLine();
@@ -122,10 +132,10 @@ public class QuestTrackerWindow : Window, IDisposable
     {
         return type switch
         {
-            QuestType.Social => new Vector4(0.4f, 0.8f, 1.0f, 1.0f),    // Light blue
-            QuestType.Buff => new Vector4(0.8f, 1.0f, 0.4f, 1.0f),      // Light green
-            QuestType.Emote => new Vector4(1.0f, 0.8f, 0.4f, 1.0f),     // Light orange
-            QuestType.Custom => new Vector4(0.83f, 0.69f, 0.22f, 1.0f), // Gold
+            QuestType.Social => SocialBlue,
+            QuestType.Buff => BuffGreen,
+            QuestType.Emote => EmoteOrange,
+            QuestType.Custom => FFXIVGold,
             _ => new Vector4(1.0f, 1.0f, 1.0f, 1.0f)
         };
     }
@@ -133,11 +143,11 @@ public class QuestTrackerWindow : Window, IDisposable
     private Vector4 GetProgressColor(float progress)
     {
         if (progress >= 1.0f)
-            return new Vector4(0.3f, 0.9f, 0.3f, 1.0f);  // Bright green - complete
+            return BrightGreen;  // Complete
         else if (progress > 0f)
-            return new Vector4(0.0f, 0.81f, 0.82f, 0.8f);  // Cyan - in progress (FFXIV style)
+            return FFXIVCyanAlpha;  // In progress (FFXIV style)
         else
-            return new Vector4(0.4f, 0.4f, 0.4f, 0.6f);  // Darker gray - not started
+            return DarkGray;  // Not started
     }
 
     public void Dispose()
