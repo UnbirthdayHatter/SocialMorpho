@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 using System.Reflection;
+using System.Threading.Tasks;
 
 namespace SocialMorpho.Windows;
 
@@ -21,6 +22,7 @@ public class QuestTrackerWindow : Window
     private object? CustomQuestIcon;
     private ImTextureID CustomQuestIconHandle;
     private bool HasCustomQuestIcon;
+    private object? DefaultFontHandle;
 
     // FFXIV color scheme
     private readonly Vector4 FFXIVWhite = new(1.0f, 1.0f, 1.0f, 1.0f);
@@ -74,44 +76,12 @@ public class QuestTrackerWindow : Window
 
             var uiBuilder = Plugin.PluginInterface.UiBuilder;
             var uiBuilderType = uiBuilder.GetType();
-            var loadImageMethod = uiBuilderType
-                .GetMethods()
-                .FirstOrDefault(m => m.Name == "LoadImage"
-                    && m.GetParameters().Length == 1
-                    && m.GetParameters()[0].ParameterType == typeof(string));
-
-            object? loaded = null;
-
-            if (loadImageMethod != null)
-            {
-                loaded = loadImageMethod.Invoke(uiBuilder, new object[] { iconPath });
-            }
-            else
-            {
-                // Fallback: look for extension-style static LoadImage(IUiBuilder, string)
-                var extensionMethod = AppDomain.CurrentDomain.GetAssemblies()
-                    .SelectMany(SafeGetTypes)
-                    .Where(t => t.IsSealed && t.IsAbstract)
-                    .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static))
-                    .FirstOrDefault(m =>
-                    {
-                        if (m.Name != "LoadImage") return false;
-                        var p = m.GetParameters();
-                        return p.Length == 2
-                            && p[0].ParameterType.IsAssignableFrom(uiBuilderType)
-                            && p[1].ParameterType == typeof(string);
-                    });
-
-                if (extensionMethod != null)
-                {
-                    loaded = extensionMethod.Invoke(null, new object[] { uiBuilder, iconPath });
-                }
-            }
+            object? loaded = TryInvokeUiImageLoader(uiBuilder, uiBuilderType, iconPath);
 
             CustomQuestIcon = loaded;
             if (CustomQuestIcon == null)
             {
-                Plugin.PluginLog.Warning($"Unable to load custom icon. UiBuilder type: {uiBuilderType.FullName}");
+                Plugin.PluginLog.Warning($"Unable to load custom icon. UiBuilder type: {uiBuilderType.FullName}. Looked for LoadImage/LoadImageRaw runtime methods.");
                 return;
             }
 
@@ -154,10 +124,12 @@ public class QuestTrackerWindow : Window
         if (activeQuests.Count == 0)
             return;
 
+        PushDefaultGameFont();
         foreach (var quest in activeQuests)
         {
             DrawQuestEntry(quest);
         }
+        PopDefaultGameFont();
     }
 
     private void DrawQuestEntry(QuestData quest)
@@ -328,6 +300,135 @@ public class QuestTrackerWindow : Window
                 }
             default:
                 return false;
+        }
+    }
+
+    private object? TryInvokeUiImageLoader(object uiBuilder, Type uiBuilderType, string iconPath)
+    {
+        var attempted = new List<string>();
+        var fileBytes = File.ReadAllBytes(iconPath);
+
+        // Instance methods first.
+        foreach (var method in uiBuilderType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            if (!method.Name.Contains("Image", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var parameters = method.GetParameters();
+            if (parameters.Length == 1 && parameters[0].ParameterType == typeof(string))
+            {
+                attempted.Add($"{method.DeclaringType?.FullName}::{method.Name}(string)");
+                if (TryInvokeAndUnwrap(method, uiBuilder, new object[] { iconPath }, out var loaded) && loaded != null)
+                    return loaded;
+            }
+            else if (parameters.Length == 1 && parameters[0].ParameterType == typeof(byte[]))
+            {
+                attempted.Add($"{method.DeclaringType?.FullName}::{method.Name}(byte[])");
+                if (TryInvokeAndUnwrap(method, uiBuilder, new object[] { fileBytes }, out var loaded) && loaded != null)
+                    return loaded;
+            }
+        }
+
+        // Static extension-like methods as fallback.
+        foreach (var method in AppDomain.CurrentDomain.GetAssemblies()
+                     .SelectMany(SafeGetTypes)
+                     .Where(t => t.IsSealed && t.IsAbstract)
+                     .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static)))
+        {
+            if (!method.Name.Contains("Image", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var parameters = method.GetParameters();
+            if (parameters.Length == 2
+                && parameters[0].ParameterType.IsAssignableFrom(uiBuilderType)
+                && parameters[1].ParameterType == typeof(string))
+            {
+                attempted.Add($"{method.DeclaringType?.FullName}::{method.Name}(IUiBuilder,string)");
+                if (TryInvokeAndUnwrap(method, null, new object[] { uiBuilder, iconPath }, out var loaded) && loaded != null)
+                    return loaded;
+            }
+            else if (parameters.Length == 2
+                     && parameters[0].ParameterType.IsAssignableFrom(uiBuilderType)
+                     && parameters[1].ParameterType == typeof(byte[]))
+            {
+                attempted.Add($"{method.DeclaringType?.FullName}::{method.Name}(IUiBuilder,byte[])");
+                if (TryInvokeAndUnwrap(method, null, new object[] { uiBuilder, fileBytes }, out var loaded) && loaded != null)
+                    return loaded;
+            }
+        }
+
+        Plugin.PluginLog.Warning($"No compatible image loader succeeded. Attempted: {string.Join(" | ", attempted.Distinct())}");
+        return null;
+    }
+
+    private static bool TryInvokeAndUnwrap(MethodInfo method, object? target, object[] args, out object? loaded)
+    {
+        loaded = null;
+        try
+        {
+            var result = method.Invoke(target, args);
+            loaded = UnwrapTaskLikeResult(result);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static object? UnwrapTaskLikeResult(object? result)
+    {
+        if (result == null)
+            return null;
+
+        if (result is Task task)
+        {
+            task.GetAwaiter().GetResult();
+            var resultProp = task.GetType().GetProperty("Result");
+            return resultProp?.GetValue(task);
+        }
+
+        // ValueTask<T> or other awaitable-like wrappers with Result property.
+        var prop = result.GetType().GetProperty("Result");
+        return prop != null ? prop.GetValue(result) : result;
+    }
+
+    private void PushDefaultGameFont()
+    {
+        try
+        {
+            var uiBuilder = Plugin.PluginInterface.UiBuilder;
+            var defaultFontProp = uiBuilder.GetType().GetProperty("DefaultFontHandle");
+            DefaultFontHandle = defaultFontProp?.GetValue(uiBuilder);
+            if (DefaultFontHandle == null)
+                return;
+
+            var pushMethod = DefaultFontHandle.GetType().GetMethod("Push", BindingFlags.Public | BindingFlags.Instance);
+            pushMethod?.Invoke(DefaultFontHandle, null);
+        }
+        catch
+        {
+            DefaultFontHandle = null;
+        }
+    }
+
+    private void PopDefaultGameFont()
+    {
+        try
+        {
+            if (DefaultFontHandle == null)
+                return;
+
+            var popMethod = DefaultFontHandle.GetType().GetMethod("Pop", BindingFlags.Public | BindingFlags.Instance);
+            popMethod?.Invoke(DefaultFontHandle, null);
+        }
+        catch
+        {
+            // Ignore and continue rendering.
+        }
+        finally
+        {
+            DefaultFontHandle = null;
         }
     }
 
