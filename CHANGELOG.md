@@ -7,17 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed - Native Quest Injection Implementation
-- **Replaced ImGui Overlay**: Removed `QuestTrackerWindow.cs` ImGui overlay in favor of true native injection
-- **Native Integration**: Custom quests now appear directly in FFXIV's native `_ToDoList` addon
-- **Memory Manipulation**: Direct manipulation of `ToDoListStringArray` and `ToDoListNumberArray` structures
-- **Seamless Display**: Custom quests appear exactly like native FFXIV quests with no visual difference
-- **Implementation**: Created `Services/NativeQuestInjector.cs` that:
-  - Uses FrameworkUpdate for injection timing
-  - Marshals UTF-8 strings to unmanaged memory for quest text
-  - Populates native quest arrays with custom quest data
-  - Handles proper memory cleanup and disposal
-  - Respects the 10-quest limit (native + custom combined)
+### Changed - Quest Tracker Implementation
+- **Implemented ImGui Quest Tracker**: Created `Windows/QuestTrackerWindow.cs` as a functional FFXIV-styled overlay
+- **Replaced Incomplete Native Injection**: Replaced stub `Services/NativeQuestInjector.cs` with working ImGui overlay
+- **FFXIV-Native Styling**: Quest tracker overlay designed to match FFXIV's native quest UI
+- **Color Scheme**:
+  - Quest titles use FFXIV golden color (#D4AF37 / RGB: 0.83, 0.69, 0.22)
+  - Objective/description text uses FFXIV cyan color (#00CED1 / RGB: 0.0, 0.81, 0.82)
+  - Progress counters display in cyan to match objectives
+  - Progress bars use cyan for in-progress and bright green for completion
+- **Visual Elements**:
+  - Quest type indicator symbols before titles: ● (Social), ◆ (Buff), ■ (Emote), ★ (Custom)
+  - Arrow symbols (►) before objective descriptions matching FFXIV style
+  - Color-coded quest type indicators
+- **Positioning**: Top-right corner positioning similar to FFXIV's quest tracker
+- **Window Properties**: No title bar, auto-resize, no focus on appearing, semi-transparent background (75% opacity)
+- **Plugin Integration**: Integrated into Plugin.cs WindowSystem with proper initialization and disposal
 
 ### Added - FFXIV-Style Quest Tracker UI Enhancement
 
