@@ -10,9 +10,9 @@ namespace SocialMorpho.Windows;
 
 public class QuestTrackerWindow : Window
 {
-    private const float IconSize = 32f;
-    private const float IconGap = 12f;
-    private const float RightPadding = 20f;
+    private const float IconSize = 28f;
+    private const float IconGap = 8f;
+    private const float RightPadding = 16f;
 
     private readonly Plugin Plugin;
     private readonly QuestManager QuestManager;
@@ -116,11 +116,11 @@ public class QuestTrackerWindow : Window
         var lineHeight = ImGui.GetTextLineHeight();
         var textRightLimit = rightEdge - iconWidth - IconGap - 6f;
         var titleY = baseCursor.Y;
-        var objectiveY = titleY + MathF.Max(lineHeight + 2f, IconSize + 3f);
+        var objectiveY = titleY + lineHeight + 3f;
         var progressY = objectiveY + lineHeight + 1f;
         var nextEntryY = progressY + lineHeight + 6f;
 
-        const float titleScale = 1.24f;
+        const float titleScale = 1.12f;
         var titlePos = this.SetCursorForRightAlignedText(quest.Title, textRightLimit, titleY, titleScale);
         this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos, titleScale, bold: true);
         this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
