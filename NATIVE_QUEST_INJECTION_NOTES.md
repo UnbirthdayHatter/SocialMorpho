@@ -1,7 +1,14 @@
 # Native Quest Injection Implementation Notes
 
+## Current Status
+⚠️ **String injection is currently disabled** due to compilation issues with `CStringPointer` requiring `InteropGenerator.Runtime` dependency.
+
+**Working**: Quest metadata (icons, progress, counts) infrastructure is in place.  
+**Not Working**: String injection (titles, objectives) to native UI.  
+**Alternative**: Quests are displayed via `QuestTrackerWindow.cs` ImGui overlay.
+
 ## Overview
-The `NativeQuestInjector.cs` has been fully implemented to inject custom quests into FFXIV's native ToDoList UI. This document describes the implementation and important considerations.
+The `NativeQuestInjector.cs` infrastructure has been implemented to support custom quest injection into FFXIV's native ToDoList UI. Currently, string injection is disabled (see above), but the framework is ready for future implementation when a proper solution is found.
 
 ## Implementation Details
 
@@ -10,8 +17,8 @@ The `NativeQuestInjector.cs` has been fully implemented to inject custom quests 
 2. Access `ToDoListNumberArray` instance for quest metadata
 3. Read current native quest count from the number array
 4. Calculate available slots after native quests (max 10 total)
-5. Inject quest data using managed memory allocation
-6. Update total quest count to include custom quests
+5. ~~Inject quest data using managed memory allocation~~ (disabled - see Current Status)
+6. Update quest metadata (icons, progress) - strings handled by QuestTrackerWindow.cs
 
 ### Key Methods
 
@@ -31,14 +38,19 @@ var numberArray = ToDoListNumberArray.Instance();
 ```
 This approach is more stable than using hardcoded array IDs (72, 73) as it uses the FFXIVClientStructs enum values.
 
-#### String Injection
+#### String Injection (Not Yet Implemented)
+**Note**: String injection is currently disabled due to compilation issues.
+
+The following approach was intended but requires `InteropGenerator.Runtime` dependency:
 ```csharp
-stringArray->SetValue(questIndex * 3, quest.Title, false, true, false);
-stringArray->SetValue(questIndex * 3 + 1, objectiveText, false, true, false);
+// TODO: Requires InteropGenerator.Runtime dependency
+// stringArray->SetValue(questIndex * 3, quest.Title, false, true, false);
+// stringArray->SetValue(questIndex * 3 + 1, objectiveText, false, true, false);
 ```
-- Uses `managed=true` parameter so game handles memory allocation
-- No manual memory tracking needed for strings
-- Each quest uses 2 string slots (title and objective)
+
+**Current Implementation**: Quest display uses `QuestTrackerWindow.cs` ImGui overlay instead.
+
+**Future**: Research alternative methods for StringArrayData manipulation without `SetValue()` or consider adding the dependency if necessary.
 
 #### Number Array Updates
 ```csharp
