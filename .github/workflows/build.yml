@@ -122,9 +122,9 @@ jobs:
         shell: bash
         run: |
           unzip -l latest.zip
-          unzip -l latest.zip | grep -q " SocialMorpho.dll$"
-          unzip -l latest.zip | grep -q " SocialMorpho.json$"
-          if unzip -l latest.zip | grep -q " latest.zip$"; then
+          unzip -Z1 latest.zip | grep -qx "SocialMorpho.dll"
+          unzip -Z1 latest.zip | grep -qx "SocialMorpho.json"
+          if unzip -Z1 latest.zip | grep -qx "latest.zip"; then
             echo "Invalid latest.zip: nested latest.zip found"
             exit 1
           fi
@@ -140,3 +140,4 @@ jobs:
           files: latest.zip
           draft: false
           prerelease: true
+
