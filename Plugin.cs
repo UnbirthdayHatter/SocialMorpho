@@ -22,7 +22,7 @@ public sealed class Plugin : IDalamudPlugin
     public IPluginLog PluginLog { get; init; }
     
     [PluginService]
-    internal static ITextureProvider TextureProvider { get; private set; } = null!
+    internal static ITextureProvider TextureProvider { get; private set; } = null!;
     
     public Configuration Configuration { get; init; }
     public WindowSystem WindowSystem = new("SocialMorpho");
