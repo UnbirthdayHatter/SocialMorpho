@@ -21,18 +21,7 @@ jobs:
       with:
         dotnet-version: '10.0.x'
       
-        # Verify Dalamud.dll exists
-        $dalamudDll = Join-Path $dalamudPath "Dalamud.dll"
-        if (Test-Path $dalamudDll) {
-          Write-Host "✅ Dalamud.dll found at: $dalamudDll"
-          # Show version info
-          $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($dalamudDll)
-          Write-Host "Dalamud Version: $($version.FileVersion)"
-        } else {
-          Write-Error "❌ Dalamud.dll not found!"
-          exit 1
-        }
-            
+                   
     - name: Restore dependencies
       run: dotnet restore
     
