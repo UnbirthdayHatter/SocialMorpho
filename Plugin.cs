@@ -166,6 +166,7 @@ public sealed class Plugin : IDalamudPlugin
 
         QuestNotificationService?.Dispose();
         QuestInjector?.Dispose();
+        QuestTrackerWindow?.Dispose();
 
         PluginLog.Info("Social Morpho disposed");
     }
