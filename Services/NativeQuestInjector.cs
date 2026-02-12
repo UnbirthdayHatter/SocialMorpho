@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using SocialMorpho.Data;
 
 namespace SocialMorpho.Services;
@@ -48,9 +49,17 @@ public unsafe class NativeQuestInjector : IDisposable
         var activeQuests = QuestManager.GetActiveQuests();
         if (activeQuests.Count == 0) return;
 
-        // For now, just log that we would inject quests
-        // We need to research the correct way to access ToDoList arrays
-        Plugin.PluginLog.Info($"Would inject {activeQuests.Count} custom quests");
+        // Access the number and string arrays
+        var numberArrays = raptureTextModule->NumberArrayData;
+        var stringArrays = raptureTextModule->StringArrayData;
+
+        // ToDoList arrays - need to find the correct indices
+        // Let's try accessing them directly
+        for (int i = 0; i < activeQuests.Count && i < 5; i++)
+        {
+            var quest = activeQuests[i];
+            Plugin.PluginLog.Info($"Processing quest: {quest.Title} ({quest.CurrentCount}/{quest.GoalCount})");
+        }
     }
 
     private IntPtr AllocateString(string text)
