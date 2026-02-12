@@ -10,15 +10,19 @@ namespace SocialMorpho.Windows;
 
 public class QuestTrackerWindow : Window
 {
+    private const float IconSize = 22f;
+    private const float IconGap = 6f;
+    private const float RightPadding = 16f;
+
     private readonly Plugin Plugin;
     private readonly QuestManager QuestManager;
     private ISharedImmediateTexture? CustomQuestIcon;
     private string? LoadedIconPath;
     private bool LoggedWrapFailure;
 
-    // Tuned close to native quest glow tones.
-    private readonly Vector4 FFXIVGold = new(0.77f, 0.69f, 0.44f, 0.42f);
-    private readonly Vector4 FFXIVBlue = new(0.45f, 0.76f, 0.90f, 0.40f);
+    // Picked from provided reference captures, slightly softened for halo rendering.
+    private readonly Vector4 FFXIVGold = new(0.84f, 0.78f, 0.53f, 0.40f);
+    private readonly Vector4 FFXIVBlue = new(0.41f, 0.80f, 0.95f, 0.38f);
     private readonly Vector4 WhiteText = new(1.0f, 1.0f, 1.0f, 1.0f);
 
     public QuestTrackerWindow(Plugin plugin, QuestManager questManager)
@@ -106,16 +110,16 @@ public class QuestTrackerWindow : Window
             : $"Complete {quest.GoalCount} objectives";
 
         var baseCursor = ImGui.GetCursorScreenPos();
-        var rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X - 16f;
-        var iconWidth = this.CustomQuestIcon != null ? 20f : 12f;
+        var rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X - RightPadding;
+        var iconWidth = this.CustomQuestIcon != null ? IconSize : 12f;
         var lineHeight = ImGui.GetTextLineHeight();
         var titleY = baseCursor.Y;
         var objectiveY = titleY + lineHeight + 2f;
         var progressY = objectiveY + lineHeight + 1f;
         var nextEntryY = progressY + lineHeight + 6f;
 
-        const float titleScale = 1.00f;
-        var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - 6f, titleY, titleScale);
+        const float titleScale = 1.08f;
+        var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - IconGap, titleY, titleScale);
         this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos, titleScale, bold: true);
         this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
 
@@ -171,7 +175,7 @@ public class QuestTrackerWindow : Window
             wrap is IDrawListTextureWrap drawListWrap)
         {
             var drawList = ImGui.GetWindowDrawList();
-            drawListWrap.Draw(drawList, new Vector2(x, y), new Vector2(x + 20f, y + 20f));
+            drawListWrap.Draw(drawList, new Vector2(x, y - 1f), new Vector2(x + IconSize, y - 1f + IconSize));
             return;
         }
 
@@ -180,7 +184,7 @@ public class QuestTrackerWindow : Window
             TryGetImGuiTextureFromWrap(wrapForHandle, out var textureId))
         {
             ImGui.SetCursorScreenPos(new Vector2(x, y));
-            ImGui.Image(textureId, new Vector2(20f, 20f));
+            ImGui.Image(textureId, new Vector2(IconSize, IconSize));
             return;
         }
 
