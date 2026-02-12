@@ -10,9 +10,9 @@ namespace SocialMorpho.Windows;
 
 public class QuestTrackerWindow : Window
 {
-    private const float IconSize = 28f;
-    private const float IconGap = 8f;
-    private const float RightPadding = 16f;
+    private const float IconSize = 27f;
+    private const float IconGap = 2f;
+    private const float RightPadding = 14f;
 
     private readonly Plugin Plugin;
     private readonly QuestManager QuestManager;
@@ -120,17 +120,18 @@ public class QuestTrackerWindow : Window
         var progressY = objectiveY + lineHeight + 1f;
         var nextEntryY = progressY + lineHeight + 6f;
 
-        const float titleScale = 1.12f;
+        const float titleScale = 1.18f;
+        const float bodyScale = 1.08f;
         var titlePos = this.SetCursorForRightAlignedText(quest.Title, textRightLimit, titleY, titleScale);
         this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos, titleScale, bold: true);
         this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
 
-        var objectivePos = this.SetCursorForRightAlignedText(objectiveText, textRightLimit, objectiveY);
-        this.DrawHaloText(objectiveText, this.FFXIVBlue, objectivePos);
+        var objectivePos = this.SetCursorForRightAlignedText(objectiveText, textRightLimit, objectiveY, bodyScale);
+        this.DrawHaloText(objectiveText, this.FFXIVBlue, objectivePos, bodyScale);
 
         var progressText = $"{quest.CurrentCount}/{quest.GoalCount}";
-        var progressPos = this.SetCursorForRightAlignedText(progressText, textRightLimit, progressY);
-        this.DrawHaloText(progressText, this.FFXIVBlue, progressPos);
+        var progressPos = this.SetCursorForRightAlignedText(progressText, textRightLimit, progressY, bodyScale);
+        this.DrawHaloText(progressText, this.FFXIVBlue, progressPos, bodyScale);
 
         ImGui.SetCursorScreenPos(new Vector2(baseCursor.X, nextEntryY));
         ImGui.Spacing();
@@ -159,6 +160,7 @@ public class QuestTrackerWindow : Window
         drawList.AddText(new Vector2(textPos.X + 0, textPos.Y + 1), haloU32, text);
         drawList.AddText(new Vector2(textPos.X + 0, textPos.Y - 1), haloU32, text);
 
+        ImGui.SetWindowFontScale(scale);
         ImGui.PushStyleColor(ImGuiCol.Text, this.WhiteText);
         if (bold)
         {
@@ -167,6 +169,7 @@ public class QuestTrackerWindow : Window
         }
         ImGui.TextUnformatted(text);
         ImGui.PopStyleColor();
+        ImGui.SetWindowFontScale(1.0f);
     }
 
     private void DrawCustomIconAt(float x, float y)
