@@ -17,8 +17,8 @@ public class QuestTrackerWindow : Window
     private bool HasCustomQuestIcon;
 
     // Soft halo tones tuned toward native quest styling.
-    private readonly Vector4 FFXIVGold = new(0.70f, 0.64f, 0.45f, 0.56f);
-    private readonly Vector4 FFXIVBlue = new(0.36f, 0.63f, 0.74f, 0.54f);
+    private readonly Vector4 FFXIVGold = new(0.70f, 0.64f, 0.45f, 0.46f);
+    private readonly Vector4 FFXIVBlue = new(0.36f, 0.63f, 0.74f, 0.44f);
     private readonly Vector4 WhiteText = new(1.0f, 1.0f, 1.0f, 1.0f);
 
     public QuestTrackerWindow(Plugin plugin, QuestManager questManager)
@@ -200,6 +200,25 @@ public class QuestTrackerWindow : Window
 
         var textureType = typeof(ImTextureID);
         var valueType = value.GetType();
+
+        // Common handle primitives in Dalamud wrappers.
+        if (TryCreateTextureIdViaOperators(textureType, value, valueType, out textureId))
+            return true;
+
+        if (value is IntPtr ip)
+        {
+            if (TryCreateTextureIdViaOperators(textureType, ip.ToInt64(), typeof(long), out textureId))
+                return true;
+            if (TryCreateTextureIdViaOperators(textureType, (ulong)ip.ToInt64(), typeof(ulong), out textureId))
+                return true;
+        }
+
+        if (value is UIntPtr uip)
+        {
+            if (TryCreateTextureIdViaOperators(textureType, uip.ToUInt64(), typeof(ulong), out textureId))
+                return true;
+        }
+
         var constructors = textureType.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
         foreach (var ctor in constructors)
         {
@@ -220,7 +239,12 @@ public class QuestTrackerWindow : Window
             {
                 try
                 {
-                    argValue = Convert.ChangeType(value, targetType);
+                    if (targetType == typeof(IntPtr) && value is long l)
+                        argValue = new IntPtr(l);
+                    else if (targetType == typeof(UIntPtr) && value is ulong ul)
+                        argValue = new UIntPtr(ul);
+                    else
+                        argValue = Convert.ChangeType(value, targetType);
                     canConvert = true;
                 }
                 catch
@@ -234,6 +258,54 @@ public class QuestTrackerWindow : Window
             try
             {
                 var created = ctor.Invoke(new[] { argValue });
+                if (created is ImTextureID typed)
+                {
+                    textureId = typed;
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        textureId = default;
+        return false;
+    }
+
+    private static bool TryCreateTextureIdViaOperators(Type textureType, object value, Type valueType, out ImTextureID textureId)
+    {
+        var operators = textureType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+            .Where(m =>
+                (m.Name == "op_Implicit" || m.Name == "op_Explicit") &&
+                m.ReturnType == textureType &&
+                m.GetParameters().Length == 1)
+            .ToArray();
+
+        foreach (var op in operators)
+        {
+            var pType = op.GetParameters()[0].ParameterType;
+            object? arg = null;
+            try
+            {
+                if (pType.IsAssignableFrom(valueType))
+                {
+                    arg = value;
+                }
+                else if (pType == typeof(IntPtr) && value is long l)
+                {
+                    arg = new IntPtr(l);
+                }
+                else if (pType == typeof(UIntPtr) && value is ulong ul)
+                {
+                    arg = new UIntPtr(ul);
+                }
+                else
+                {
+                    arg = Convert.ChangeType(value, pType);
+                }
+
+                var created = op.Invoke(null, new[] { arg });
                 if (created is ImTextureID typed)
                 {
                     textureId = typed;
@@ -292,7 +364,7 @@ public class QuestTrackerWindow : Window
         var progressY = objectiveY + lineHeight + 1f;
         var nextEntryY = progressY + lineHeight + 6f;
 
-        const float titleScale = 1.06f;
+        const float titleScale = 1.02f;
         var titlePos = this.SetCursorForRightAlignedText(quest.Title, rightEdge - iconWidth - 6f, titleY, titleScale);
         this.DrawHaloText(quest.Title, this.FFXIVGold, titlePos, titleScale);
         this.DrawCustomIconAt(rightEdge - iconWidth, titlePos.Y);
@@ -320,16 +392,10 @@ public class QuestTrackerWindow : Window
     {
         var drawList = ImGui.GetWindowDrawList();
         var haloU32 = ImGui.ColorConvertFloat4ToU32(haloColor);
-        var outerHalo = new Vector4(haloColor.X, haloColor.Y, haloColor.Z, haloColor.W * 0.45f);
-        var outerHaloU32 = ImGui.ColorConvertFloat4ToU32(outerHalo);
         drawList.AddText(new Vector2(textPos.X + 1, textPos.Y + 0), haloU32, text);
         drawList.AddText(new Vector2(textPos.X - 1, textPos.Y + 0), haloU32, text);
         drawList.AddText(new Vector2(textPos.X + 0, textPos.Y + 1), haloU32, text);
         drawList.AddText(new Vector2(textPos.X + 0, textPos.Y - 1), haloU32, text);
-        drawList.AddText(new Vector2(textPos.X + 2, textPos.Y + 0), outerHaloU32, text);
-        drawList.AddText(new Vector2(textPos.X - 2, textPos.Y + 0), outerHaloU32, text);
-        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y + 2), outerHaloU32, text);
-        drawList.AddText(new Vector2(textPos.X + 0, textPos.Y - 2), outerHaloU32, text);
 
         ImGui.PushStyleColor(ImGuiCol.Text, this.WhiteText);
         ImGui.SetWindowFontScale(scale);
