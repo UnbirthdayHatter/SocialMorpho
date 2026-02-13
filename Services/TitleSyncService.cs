@@ -24,6 +24,8 @@ public sealed class TitleSyncService : IDisposable
     private string lastPushedColor = string.Empty;
     private bool pullInFlight;
     private bool pushInFlight;
+    private DateTime lastPullErrorLogUtc = DateTime.MinValue;
+    private DateTime lastPushErrorLogUtc = DateTime.MinValue;
 
     public TitleSyncService(Plugin plugin, IClientState clientState, IObjectTable objectTable, IPluginLog log)
     {
@@ -46,13 +48,13 @@ public sealed class TitleSyncService : IDisposable
         if (cfg.ShareTitleSync && now >= this.nextPushAtUtc && !this.pushInFlight)
         {
             _ = PushLocalTitleAsync();
-            this.nextPushAtUtc = now.AddSeconds(45);
+            this.nextPushAtUtc = now.AddMinutes(2);
         }
 
         if (cfg.ShowSyncedTitles && now >= this.nextPullAtUtc && !this.pullInFlight)
         {
             _ = PullNearbyTitlesAsync();
-            this.nextPullAtUtc = now.AddSeconds(5);
+            this.nextPullAtUtc = now.AddSeconds(30);
         }
     }
 
@@ -165,7 +167,12 @@ public sealed class TitleSyncService : IDisposable
             if (!res.IsSuccessStatusCode)
             {
                 var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
-                this.log.Warning($"Title sync push failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
+                if (DateTime.UtcNow - this.lastPushErrorLogUtc >= TimeSpan.FromMinutes(2))
+                {
+                    this.lastPushErrorLogUtc = DateTime.UtcNow;
+                    this.log.Warning($"Title sync push failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
+                }
+                this.nextPushAtUtc = DateTime.UtcNow.AddMinutes(10);
                 return;
             }
 
@@ -210,7 +217,12 @@ public sealed class TitleSyncService : IDisposable
             if (!res.IsSuccessStatusCode)
             {
                 var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
-                this.log.Warning($"Title sync pull failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
+                if (DateTime.UtcNow - this.lastPullErrorLogUtc >= TimeSpan.FromMinutes(1))
+                {
+                    this.lastPullErrorLogUtc = DateTime.UtcNow;
+                    this.log.Warning($"Title sync pull failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
+                }
+                this.nextPullAtUtc = DateTime.UtcNow.AddMinutes(3);
                 return;
             }
 
@@ -245,7 +257,7 @@ public sealed class TitleSyncService : IDisposable
 
     private List<LookupPlayer> BuildNearbyPlayers()
     {
-        var result = new List<LookupPlayer>(32);
+        var result = new List<LookupPlayer>(24);
         var localId = this.objectTable.LocalPlayer?.GameObjectId ?? 0;
 
         foreach (var obj in this.objectTable)
@@ -267,7 +279,7 @@ public sealed class TitleSyncService : IDisposable
                 character = character,
                 world = string.IsNullOrWhiteSpace(world) ? string.Empty : world,
             });
-            if (result.Count >= 100)
+            if (result.Count >= 24)
             {
                 break;
             }

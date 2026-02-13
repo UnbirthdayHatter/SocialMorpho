@@ -4,7 +4,6 @@ const MAX_NAME_LEN = 32;
 const MAX_WORLD_LEN = 24;
 const MAX_BATCH = 100;
 const TTL_SECONDS = 60 * 60 * 24 * 14; // 14 days
-const UPDATE_RATE_LIMIT_PER_MINUTE = 30;
 
 export default {
   async fetch(request, env) {
@@ -32,10 +31,6 @@ export default {
       }
 
       if (path === "/v1/title/update" && request.method === "POST") {
-        const allowed = await checkUpdateRateLimit(request, env);
-        if (!allowed) {
-          return json({ ok: false, error: "rate_limited" }, 429);
-        }
         return handleUpdate(request, env);
       }
 
@@ -71,21 +66,6 @@ function isClientVersionAllowed(request, env) {
   return sent === required;
 }
 
-async function checkUpdateRateLimit(request, env) {
-  const ip = request.headers.get("cf-connecting-ip") || "unknown";
-  const minuteBucket = Math.floor(Date.now() / 60000);
-  const key = `ratelimit:update:${ip}:${minuteBucket}`;
-
-  const currentRaw = await env.TITLE_KV.get(key);
-  const current = currentRaw ? Number.parseInt(currentRaw, 10) : 0;
-  if (current >= UPDATE_RATE_LIMIT_PER_MINUTE) {
-    return false;
-  }
-
-  await env.TITLE_KV.put(key, String(current + 1), { expirationTtl: 120 });
-  return true;
-}
-
 async function handleUpdate(request, env) {
   const body = await request.json();
   const parsed = normalizeUpdatePayload(body);
@@ -104,8 +84,19 @@ async function handleUpdate(request, env) {
     updatedAtUtc: data.updatedAtUtc || new Date().toISOString(),
   };
 
-  await env.TITLE_KV.put(key, JSON.stringify(record), { expirationTtl: TTL_SECONDS });
-  await env.TITLE_KV.put(characterOnlyKey, JSON.stringify(record), { expirationTtl: TTL_SECONDS });
+  try {
+    await env.TITLE_KV.put(key, JSON.stringify(record), { expirationTtl: TTL_SECONDS });
+    await env.TITLE_KV.put(characterOnlyKey, JSON.stringify(record), { expirationTtl: TTL_SECONDS });
+  } catch (err) {
+    return json(
+      {
+        ok: false,
+        error: "kv_unavailable",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      503,
+    );
+  }
   return json({ ok: true, record }, 200);
 }
 
@@ -117,9 +108,21 @@ async function handleGet(url, env) {
   }
 
   const key = toKey(character, world);
-  let raw = await env.TITLE_KV.get(key);
-  if (!raw) {
-    raw = await env.TITLE_KV.get(toCharacterOnlyKey(character));
+  let raw = null;
+  try {
+    raw = await env.TITLE_KV.get(key);
+    if (!raw) {
+      raw = await env.TITLE_KV.get(toCharacterOnlyKey(character));
+    }
+  } catch (err) {
+    return json(
+      {
+        ok: false,
+        error: "kv_unavailable",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      503,
+    );
   }
   if (!raw) {
     return json({ ok: true, found: false }, 200);
@@ -157,10 +160,25 @@ async function handleBatch(request, env) {
   const uniqueKeys = [...new Set(keys)];
   const uniqueCharacterOnlyKeys = [...new Set(characterOnlyKeys)];
 
-  const rows = uniqueKeys.length ? await env.TITLE_KV.get(uniqueKeys, "json") : {};
-  const fallbackRows = uniqueCharacterOnlyKeys.length
-    ? await env.TITLE_KV.get(uniqueCharacterOnlyKeys, "json")
-    : {};
+  let rows = {};
+  let fallbackRows = {};
+  try {
+    rows = uniqueKeys.length ? await env.TITLE_KV.get(uniqueKeys, "json") : {};
+    fallbackRows = uniqueCharacterOnlyKeys.length
+      ? await env.TITLE_KV.get(uniqueCharacterOnlyKeys, "json")
+      : {};
+  } catch (err) {
+    // Degrade gracefully instead of throwing Cloudflare 1101.
+    return json(
+      {
+        ok: true,
+        degraded: true,
+        records: {},
+        warning: err instanceof Error ? err.message : String(err),
+      },
+      200,
+    );
+  }
 
   const merged = {};
   for (const [k, v] of Object.entries(rows || {})) {
