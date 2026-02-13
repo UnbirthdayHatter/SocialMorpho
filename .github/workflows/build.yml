@@ -195,23 +195,9 @@ jobs:
           body: |
             Automated release from `${{ github.ref_name }}`.
             Commit: `${{ github.sha }}`
-          files: SocialMorpho-v${{ steps.version.outputs.version }}.zip
-          overwrite_files: true
-          fail_on_unmatched_files: true
-          make_latest: true
-          draft: false
-          prerelease: false
-
-      - name: Publish or update latest release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: Latest Build
-          target_commitish: ${{ github.sha }}
-          body: |
-            Automated release from `${{ github.ref_name }}`.
-            Commit: `${{ github.sha }}`
-          files: latest.zip
+          files: |
+            SocialMorpho-v${{ steps.version.outputs.version }}.zip
+            latest.zip
           overwrite_files: true
           fail_on_unmatched_files: true
           make_latest: true
