@@ -22,6 +22,12 @@ public sealed class NameplateTitleService : IDisposable
 
     private void OnNamePlateUpdate(INamePlateUpdateContext context, IReadOnlyList<INamePlateUpdateHandler> handlers)
     {
+        if (this.plugin.IsHonorificBridgeActive())
+        {
+            // Honorific/Lightless handles rendering and colors in this mode.
+            return;
+        }
+
         var localEnabled = this.plugin.Configuration.ShowRewardTitleOnNameplate;
         var syncEnabled = this.plugin.Configuration.EnableTitleSync && this.plugin.Configuration.ShowSyncedTitles;
         if (!localEnabled && !syncEnabled)

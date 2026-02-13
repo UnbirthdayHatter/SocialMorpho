@@ -20,8 +20,13 @@ public sealed class TitleSyncService : IDisposable
     private readonly Dictionary<string, SyncedTitleRecord> cache = new(StringComparer.OrdinalIgnoreCase);
     private DateTime nextPullAtUtc = DateTime.MinValue;
     private DateTime nextPushAtUtc = DateTime.MinValue;
+    private DateTime nextHonorificCheckAtUtc = DateTime.MinValue;
+    private DateTime cloudUnavailableUntilUtc = DateTime.MinValue;
     private string lastPushedTitle = string.Empty;
     private string lastPushedColor = string.Empty;
+    private string lastHonorificTitle = string.Empty;
+    private bool honorificBridgeActive;
+    private int consecutiveCloudFailures;
     private bool pullInFlight;
     private bool pushInFlight;
     private DateTime lastPullErrorLogUtc = DateTime.MinValue;
@@ -45,6 +50,23 @@ public sealed class TitleSyncService : IDisposable
         }
 
         var now = DateTime.UtcNow;
+        if (now >= this.nextHonorificCheckAtUtc)
+        {
+            this.honorificBridgeActive = DetectHonorificBridgeAvailable();
+            this.nextHonorificCheckAtUtc = now.AddSeconds(30);
+        }
+
+        if (IsHonorificFallbackActive(cfg, now))
+        {
+            if (cfg.ShareTitleSync && now >= this.nextPushAtUtc && !this.pushInFlight)
+            {
+                PushLocalTitleToHonorific();
+                this.nextPushAtUtc = now.AddSeconds(20);
+            }
+
+            return;
+        }
+
         if (cfg.ShareTitleSync && now >= this.nextPushAtUtc && !this.pushInFlight)
         {
             _ = PushLocalTitleAsync();
@@ -114,10 +136,124 @@ public sealed class TitleSyncService : IDisposable
         this.nextPushAtUtc = DateTime.MinValue;
     }
 
+    public bool IsHonorificBridgeActive => IsHonorificFallbackActive(this.plugin.Configuration, DateTime.UtcNow);
+
+    public string GetProviderLabel()
+    {
+        var now = DateTime.UtcNow;
+        if (IsHonorificFallbackActive(this.plugin.Configuration, now))
+        {
+            return "Honorific/Lightless (fallback active)";
+        }
+
+        return $"SocialMorpho Cloud (primary) ({this.plugin.Configuration.TitleSyncApiUrl})";
+    }
+
     private void OnLogin()
     {
         this.nextPullAtUtc = DateTime.MinValue;
         this.nextPushAtUtc = DateTime.MinValue;
+        this.nextHonorificCheckAtUtc = DateTime.MinValue;
+    }
+
+    private bool DetectHonorificBridgeAvailable()
+    {
+        // Honorific exposes a Ready bool IPC call and Lightless consumes Honorific IPC.
+        return TryInvokeIpcFunc<bool>("Honorific.Ready", out var ready) && ready;
+    }
+
+    private bool IsHonorificFallbackActive(Configuration cfg, DateTime nowUtc)
+    {
+        return cfg.PreferHonorificSync &&
+               this.honorificBridgeActive &&
+               nowUtc < this.cloudUnavailableUntilUtc;
+    }
+
+    private void MarkCloudFailure()
+    {
+        this.consecutiveCloudFailures++;
+        if (this.consecutiveCloudFailures >= 3)
+        {
+            this.cloudUnavailableUntilUtc = DateTime.UtcNow.AddMinutes(20);
+        }
+    }
+
+    private void MarkCloudSuccess()
+    {
+        this.consecutiveCloudFailures = 0;
+        this.cloudUnavailableUntilUtc = DateTime.MinValue;
+    }
+
+    private void PushLocalTitleToHonorific()
+    {
+        try
+        {
+            var title = this.plugin.QuestManager.GetStats().UnlockedTitle?.Trim();
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                return;
+            }
+
+            if (string.Equals(title, this.lastHonorificTitle, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var escapedTitle = title.Replace("\"", "\\\"", StringComparison.Ordinal);
+            if (!this.plugin.TryRunCommandText($"/honorific force set \"{escapedTitle}\""))
+            {
+                return;
+            }
+
+            this.lastHonorificTitle = title;
+        }
+        catch (Exception ex)
+        {
+            this.log.Warning($"Honorific handoff failed: {ex.Message}");
+        }
+    }
+
+    private bool TryInvokeIpcFunc<TReturn>(string callGateName, out TReturn value)
+    {
+        value = default!;
+        try
+        {
+            var method = this.plugin.PluginInterface.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(m => string.Equals(m.Name, "GetIpcSubscriber", StringComparison.Ordinal) &&
+                                     m.IsGenericMethodDefinition &&
+                                     m.GetParameters().Length == 1 &&
+                                     m.GetParameters()[0].ParameterType == typeof(string));
+            if (method == null)
+            {
+                return false;
+            }
+
+            var generic = method.MakeGenericMethod(typeof(TReturn));
+            var subscriber = generic.Invoke(this.plugin.PluginInterface, [callGateName]);
+            if (subscriber == null)
+            {
+                return false;
+            }
+
+            var invokeFunc = subscriber.GetType().GetMethod("InvokeFunc", BindingFlags.Public | BindingFlags.Instance);
+            if (invokeFunc == null)
+            {
+                return false;
+            }
+
+            var result = invokeFunc.Invoke(subscriber, null);
+            if (result is TReturn typed)
+            {
+                value = typed;
+                return true;
+            }
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task PushLocalTitleAsync()
@@ -173,15 +309,18 @@ public sealed class TitleSyncService : IDisposable
                     this.log.Warning($"Title sync push failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
                 }
                 this.nextPushAtUtc = DateTime.UtcNow.AddMinutes(10);
+                MarkCloudFailure();
                 return;
             }
 
             this.lastPushedTitle = title;
             this.lastPushedColor = color;
+            MarkCloudSuccess();
         }
         catch (Exception ex)
         {
             this.log.Warning($"Title sync push failed: {ex.Message}");
+            MarkCloudFailure();
         }
         finally
         {
@@ -223,6 +362,7 @@ public sealed class TitleSyncService : IDisposable
                     this.log.Warning($"Title sync pull failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
                 }
                 this.nextPullAtUtc = DateTime.UtcNow.AddMinutes(3);
+                MarkCloudFailure();
                 return;
             }
 
@@ -244,10 +384,13 @@ public sealed class TitleSyncService : IDisposable
                 var characterOnlyKey = $"title:{pair.Value.character.ToLowerInvariant()}";
                 this.cache[characterOnlyKey] = pair.Value;
             }
+
+            MarkCloudSuccess();
         }
         catch (Exception ex)
         {
             this.log.Warning($"Title sync pull failed: {ex.Message}");
+            MarkCloudFailure();
         }
         finally
         {

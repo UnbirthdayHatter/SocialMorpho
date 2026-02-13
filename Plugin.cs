@@ -11,6 +11,7 @@ using SocialMorpho.Data;
 using SocialMorpho.Windows;
 using SocialMorpho.Services;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace SocialMorpho;
@@ -426,6 +427,14 @@ public sealed class Plugin : IDalamudPlugin
             changed = true;
         }
 
+        if (Configuration.Version < 5)
+        {
+            // Prefer local IPC handoff (Honorific/Lightless) when available.
+            Configuration.PreferHonorificSync = true;
+            Configuration.Version = 5;
+            changed = true;
+        }
+
         if (changed)
         {
             Configuration.Save();
@@ -479,6 +488,41 @@ public sealed class Plugin : IDalamudPlugin
     public void RequestTitleSyncNow()
     {
         TitleSyncService.RequestPushSoon();
+    }
+
+    public bool IsHonorificBridgeActive()
+    {
+        return TitleSyncService.IsHonorificBridgeActive;
+    }
+
+    public string GetTitleSyncProviderLabel()
+    {
+        return TitleSyncService.GetProviderLabel();
+    }
+
+    public bool TryRunCommandText(string commandText)
+    {
+        if (string.IsNullOrWhiteSpace(commandText))
+        {
+            return false;
+        }
+
+        try
+        {
+            var method = CommandManager.GetType().GetMethod("ProcessCommand", BindingFlags.Public | BindingFlags.Instance, null, [typeof(string)], null);
+            if (method == null)
+            {
+                return false;
+            }
+
+            method.Invoke(CommandManager, [commandText]);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warning($"Failed to execute command '{commandText}': {ex.Message}");
+            return false;
+        }
     }
 
     public bool ShouldHideQuestOverlay()

@@ -31,6 +31,7 @@ public class Configuration : IPluginConfiguration
     public bool EnableTitleSync { get; set; } = true;
     public bool ShareTitleSync { get; set; } = true;
     public bool ShowSyncedTitles { get; set; } = true;
+    public bool PreferHonorificSync { get; set; } = true;
     public string TitleSyncApiUrl { get; set; } = DefaultTitleSyncApiUrl;
     public string TitleSyncApiKey { get; set; } = string.Empty;
 
