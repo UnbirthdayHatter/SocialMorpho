@@ -21,6 +21,7 @@ public sealed class Plugin : IDalamudPlugin
     private ICommandManager CommandManager { get; init; }
     private IClientState ClientState { get; init; }
     private IChatGui ChatGui { get; init; }
+    private IToastGui ToastGui { get; init; }
     public IPluginLog PluginLog { get; init; }
     public ITextureProvider TextureProvider { get; init; }
     
@@ -40,6 +41,7 @@ public sealed class Plugin : IDalamudPlugin
         ICommandManager commandManager,
         IClientState clientState,
         IChatGui chatGui,
+        IToastGui toastGui,
         IPluginLog pluginLog,
         ITextureProvider textureProvider)
     {
@@ -47,6 +49,7 @@ public sealed class Plugin : IDalamudPlugin
         CommandManager = commandManager;
         ClientState = clientState;
         ChatGui = chatGui;
+        ToastGui = toastGui;
         PluginLog = pluginLog;
         TextureProvider = textureProvider;
 
@@ -78,7 +81,7 @@ public sealed class Plugin : IDalamudPlugin
         QuestTrackerWindow = new QuestTrackerWindow(this, QuestManager);
         QuestOfferWindow = new QuestOfferWindow(this);
         QuestInjector = new NativeQuestInjector(this, QuestManager);
-        QuestOfferService = new QuestOfferService(this, ClientState, PluginLog, QuestOfferWindow);
+        QuestOfferService = new QuestOfferService(this, ClientState, ToastGui, PluginLog, QuestOfferWindow);
 
         WindowSystem.AddWindow(MainWindow);
         WindowSystem.AddWindow(QuestTrackerWindow);

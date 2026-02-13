@@ -1,4 +1,5 @@
 using Dalamud.Plugin.Services;
+using Dalamud.Game.Gui.Toast;
 using SocialMorpho.Data;
 using SocialMorpho.Windows;
 
@@ -10,6 +11,7 @@ public class QuestOfferService : IDisposable
 
     private readonly Plugin plugin;
     private readonly IClientState clientState;
+    private readonly IToastGui toastGui;
     private readonly IPluginLog pluginLog;
     private readonly QuestOfferWindow questOfferWindow;
 
@@ -34,11 +36,13 @@ public class QuestOfferService : IDisposable
     public QuestOfferService(
         Plugin plugin,
         IClientState clientState,
+        IToastGui toastGui,
         IPluginLog pluginLog,
         QuestOfferWindow questOfferWindow)
     {
         this.plugin = plugin;
         this.clientState = clientState;
+        this.toastGui = toastGui;
         this.pluginLog = pluginLog;
         this.questOfferWindow = questOfferWindow;
 
@@ -74,6 +78,7 @@ public class QuestOfferService : IDisposable
             this.plugin.Configuration.LastQuestOfferPopupDate = today;
             this.plugin.Configuration.Save();
 
+            this.TryPlayPopupSound();
             this.questOfferWindow.ShowOffer(offer, this.AcceptOffer, this.DeclineOffer);
             this.pluginLog.Info($"Showing quest offer popup: {offer.OfferId}");
         }
@@ -93,6 +98,7 @@ public class QuestOfferService : IDisposable
                 return false;
             }
 
+            this.TryPlayPopupSound();
             this.questOfferWindow.ShowOffer(offer, this.AcceptOffer, this.DeclineOffer);
             this.pluginLog.Info($"Showing quest offer popup (manual test): {offer.OfferId}");
             return true;
@@ -145,6 +151,29 @@ public class QuestOfferService : IDisposable
         }
 
         this.plugin.Configuration.Save();
+    }
+
+    private void TryPlayPopupSound()
+    {
+        if (!this.plugin.Configuration.SoundEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            // Quest toast sound is the closest built-in "duty unlocked" style cue.
+            this.toastGui.ShowQuest("New quest available!", new QuestToastOptions
+            {
+                DisplayCheckmark = true,
+                PlaySound = true,
+                Position = QuestToastPosition.Centre,
+            });
+        }
+        catch (Exception ex)
+        {
+            this.pluginLog.Warning($"Failed to play quest popup sound: {ex.Message}");
+        }
     }
 
     public void Dispose()
