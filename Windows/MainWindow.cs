@@ -41,7 +41,6 @@ public class MainWindow : Window, IDisposable
             ImGui.Spacing();
             ImGui.Separator();
             DrawQuestList();
-            ImGui.Spacing();
             ImGui.Separator();
             if (ImGui.CollapsingHeader("Settings & Analytics"))
             {
@@ -81,7 +80,7 @@ public class MainWindow : Window, IDisposable
 
         ImGui.Separator();
 
-        if (ImGui.BeginChild("##QuestListChild", new Vector2(0, 320)))
+        if (ImGui.BeginChild("##QuestListChild", new Vector2(0, 250)))
         {
             var quests = GetFilteredQuests();
             
