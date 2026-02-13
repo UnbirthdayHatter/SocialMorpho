@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace SocialMorpho.Data;
 
@@ -244,9 +245,10 @@ public class QuestManager
         EnsureStatsBuckets(now);
 
         var normalized = chatText.Trim();
+        var normalizedLower = normalized.ToLowerInvariant();
         var quest = Configuration.SavedQuests.FirstOrDefault(q =>
             !q.Completed &&
-            q.TriggerPhrases.Any(p => normalized.Contains(p, StringComparison.OrdinalIgnoreCase)));
+            IsQuestTriggeredByChat(q, normalized, normalizedLower));
 
         if (quest == null)
         {
@@ -282,6 +284,76 @@ public class QuestManager
             GoalCount = quest.GoalCount,
             CompletedNow = completedNow,
         };
+    }
+
+    private static bool IsQuestTriggeredByChat(QuestData quest, string chatText, string chatLower)
+    {
+        // Exact phrase support (existing behavior).
+        if (quest.TriggerPhrases.Any(p => chatText.Contains(p, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        // Flexible emote detection: emote keyword(s) + "you".
+        var emote = ExtractQuestEmote(quest);
+        if (string.IsNullOrWhiteSpace(emote))
+        {
+            return false;
+        }
+
+        var hasYou = chatLower.Contains(" you");
+        if (!hasYou && !chatLower.EndsWith("you", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return emote switch
+        {
+            "dote" => ContainsAny(chatLower, "dote", "dotes"),
+            "hug" => ContainsAny(chatLower, "hug", "hugs"),
+            "wave" => ContainsAny(chatLower, "wave", "waves"),
+            "dance" => ContainsAny(chatLower, "dance", "dances"),
+            "cheer" => ContainsAny(chatLower, "cheer", "cheers"),
+            "bow" => ContainsAny(chatLower, "bow", "bows"),
+            "salute" => ContainsAny(chatLower, "salute", "salutes"),
+            "thumbsup" => ContainsAny(chatLower, "thumbsup", "thumbs up", "the thumbs up", "a thumbs up", "gives you a thumbs up"),
+            "blowkiss" => ContainsAny(chatLower, "blowkiss", "blow kiss", "blows you a kiss", "blow kisses") || (chatLower.Contains("blow") && chatLower.Contains("kiss")),
+            _ => ContainsAny(chatLower, emote, $"{emote}s"),
+        };
+    }
+
+    private static string? ExtractQuestEmote(QuestData quest)
+    {
+        static string? GetFromText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            var m = Regex.Match(text, @"/([a-z]+)", RegexOptions.IgnoreCase);
+            if (!m.Success)
+            {
+                return null;
+            }
+
+            return m.Groups[1].Value.ToLowerInvariant();
+        }
+
+        return GetFromText(quest.Description) ?? GetFromText(quest.Title);
+    }
+
+    private static bool ContainsAny(string source, params string[] values)
+    {
+        foreach (var value in values)
+        {
+            if (source.Contains(value, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public void EnsureDailySocialQuests(DateTime now)

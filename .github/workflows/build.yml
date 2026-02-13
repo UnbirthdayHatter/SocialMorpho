@@ -163,6 +163,10 @@ jobs:
             NEXT_PATCH=$((LATEST_PATCH + 1))
           fi
 
+          while git rev-parse "refs/tags/v${MAJOR}.${MINOR}.${NEXT_PATCH}" >/dev/null 2>&1; do
+            NEXT_PATCH=$((NEXT_PATCH + 1))
+          done
+
           VERSION="${MAJOR}.${MINOR}.${NEXT_PATCH}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Auto version: ${VERSION}"
