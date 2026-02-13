@@ -21,7 +21,9 @@ public sealed class NameplateTitleService : IDisposable
 
     private void OnNamePlateUpdate(INamePlateUpdateContext context, IReadOnlyList<INamePlateUpdateHandler> handlers)
     {
-        if (!this.plugin.Configuration.ShowRewardTitleOnNameplate)
+        var localEnabled = this.plugin.Configuration.ShowRewardTitleOnNameplate;
+        var syncEnabled = this.plugin.Configuration.EnableTitleSync && this.plugin.Configuration.ShowSyncedTitles;
+        if (!localEnabled && !syncEnabled)
         {
             return;
         }
@@ -37,13 +39,12 @@ public sealed class NameplateTitleService : IDisposable
             var title = string.Empty;
             var colorPreset = "Gold";
 
-            if (handler.GameObjectId == localId)
+            if (handler.GameObjectId == localId && localEnabled)
             {
                 title = this.plugin.Configuration.Stats.UnlockedTitle;
                 colorPreset = this.plugin.Configuration.RewardTitleColorPreset;
             }
-            else if (this.plugin.Configuration.EnableTitleSync &&
-                     this.plugin.Configuration.ShowSyncedTitles &&
+            else if (syncEnabled &&
                      this.titleSyncService.TryGetSyncedForGameObjectId(handler.GameObjectId, out var remote) &&
                      !string.IsNullOrWhiteSpace(remote.title))
             {

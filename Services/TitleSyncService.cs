@@ -59,13 +59,24 @@ public sealed class TitleSyncService : IDisposable
     public bool TryGetSyncedForGameObjectId(ulong gameObjectId, out SyncedTitleRecord record)
     {
         record = default!;
+        var characterOnlyKey = TryBuildCharacterOnlyKeyForGameObject(gameObjectId);
         var key = TryBuildKeyForGameObject(gameObjectId);
-        if (string.IsNullOrWhiteSpace(key))
+        if (string.IsNullOrWhiteSpace(key) && string.IsNullOrWhiteSpace(characterOnlyKey))
         {
             return false;
         }
 
-        return this.cache.TryGetValue(key, out record!);
+        if (!string.IsNullOrWhiteSpace(key) && this.cache.TryGetValue(key, out record!))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(characterOnlyKey) && this.cache.TryGetValue(characterOnlyKey, out record!))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     public void RequestPushSoon()
@@ -186,6 +197,8 @@ public sealed class TitleSyncService : IDisposable
                 }
 
                 this.cache[pair.Key] = pair.Value;
+                var characterOnlyKey = $"title:{pair.Value.character.ToLowerInvariant()}";
+                this.cache[characterOnlyKey] = pair.Value;
             }
         }
         catch (Exception ex)
@@ -244,6 +257,27 @@ public sealed class TitleSyncService : IDisposable
             }
 
             return $"title:{character.ToLowerInvariant()}@{world.ToLowerInvariant()}";
+        }
+
+        return null;
+    }
+
+    private string? TryBuildCharacterOnlyKeyForGameObject(ulong gameObjectId)
+    {
+        foreach (var obj in this.objectTable)
+        {
+            if (obj == null || obj.GameObjectId != gameObjectId)
+            {
+                continue;
+            }
+
+            var character = TryGetName(obj);
+            if (string.IsNullOrWhiteSpace(character))
+            {
+                return null;
+            }
+
+            return $"title:{character.ToLowerInvariant()}";
         }
 
         return null;

@@ -114,9 +114,14 @@ public class QuestManager
         var quest = GetQuest(questId);
         if (quest != null && !quest.Completed)
         {
+            var now = DateTime.Now;
             quest.Completed = true;
-            quest.CompletedAt = DateTime.Now;
-            RegisterCompletion(DateTime.Now);
+            quest.CompletedAt = now;
+            RegisterCompletion(now);
+            if (Configuration.CurrentDailyQuestIds.Contains(quest.Id))
+            {
+                ReplaceCompletedDailyQuest(quest.Id, now);
+            }
             Configuration.Save();
         }
     }
@@ -246,7 +251,16 @@ public class QuestManager
 
     public List<QuestData> GetActiveQuests()
     {
-        return Configuration.SavedQuests.Where(q => !q.Completed).ToList();
+        var activeDaily = Configuration.CurrentDailyQuestIds
+            .Select(id => Configuration.SavedQuests.FirstOrDefault(q => q.Id == id))
+            .Where(q => q != null && !q.Completed)
+            .Cast<QuestData>();
+
+        var activeOther = Configuration.SavedQuests
+            .Where(q => !q.Completed && !Configuration.CurrentDailyQuestIds.Contains(q.Id))
+            .OrderByDescending(q => q.CreatedAt);
+
+        return activeDaily.Concat(activeOther).Take(3).ToList();
     }
 
     public List<QuestData> GetCompletedQuests()
@@ -306,6 +320,11 @@ public class QuestManager
             quest.CompletedAt = now;
             RegisterCompletion(now);
             completedNow = true;
+
+            if (Configuration.CurrentDailyQuestIds.Contains(quest.Id))
+            {
+                ReplaceCompletedDailyQuest(quest.Id, now);
+            }
         }
 
         Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats);
@@ -401,6 +420,23 @@ public class QuestManager
             Configuration.CurrentDailyQuestIds.Count == 3 &&
             Configuration.CurrentDailyQuestIds.All(id => Configuration.SavedQuests.Any(q => q.Id == id)))
         {
+            var changed = false;
+            foreach (var questId in Configuration.CurrentDailyQuestIds.ToArray())
+            {
+                var quest = Configuration.SavedQuests.FirstOrDefault(q => q.Id == questId);
+                if (quest == null || !quest.Completed)
+                {
+                    continue;
+                }
+
+                ReplaceCompletedDailyQuest(questId, now);
+                changed = true;
+            }
+
+            if (changed)
+            {
+                Configuration.Save();
+            }
             return;
         }
 
@@ -447,6 +483,49 @@ public class QuestManager
         Configuration.LastDailyQuestSelectionDate = now.Date;
         Configuration.CurrentDailyQuestIds = selectedQuestIds;
         Configuration.Save();
+    }
+
+    private void ReplaceCompletedDailyQuest(ulong questId, DateTime now)
+    {
+        var quest = Configuration.SavedQuests.FirstOrDefault(q => q.Id == questId);
+        if (quest == null)
+        {
+            return;
+        }
+
+        var preset = string.IsNullOrWhiteSpace(Configuration.ActiveQuestPreset) ? "Solo" : Configuration.ActiveQuestPreset;
+        var pool = DailySocialQuestTemplates
+            .Where(t => t.Presets.Contains(preset, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        if (pool.Count == 0)
+        {
+            pool = DailySocialQuestTemplates.ToList();
+        }
+
+        var usedDescriptions = Configuration.CurrentDailyQuestIds
+            .Select(id => Configuration.SavedQuests.FirstOrDefault(q => q.Id == id))
+            .Where(q => q != null && q.Id != questId)
+            .Select(q => q!.Description)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var available = pool.Where(t => !usedDescriptions.Contains(t.Description)).ToList();
+        if (available.Count == 0)
+        {
+            available = pool;
+        }
+
+        var template = available[Random.Shared.Next(available.Count)];
+        quest.Title = template.Title;
+        quest.Description = template.Description;
+        quest.Type = QuestType.Social;
+        quest.GoalCount = template.GoalCount;
+        quest.CurrentCount = 0;
+        quest.Completed = false;
+        quest.CompletedAt = null;
+        quest.CreatedAt = now;
+        quest.ResetSchedule = ResetSchedule.Daily;
+        quest.LastResetDate = now;
+        quest.TriggerPhrases = template.TriggerPhrases.ToList();
     }
 
     public (bool success, string message) ExportQuestPack(string configDirectory)

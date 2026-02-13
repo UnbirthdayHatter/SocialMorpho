@@ -104,7 +104,7 @@ public class MainWindow : Window, IDisposable
 
         ImGui.Separator();
 
-        if (ImGui.BeginChild("##QuestListChild", new Vector2(0, 450)))
+        if (ImGui.BeginChild("##QuestListChild", new Vector2(0, 320)))
         {
             var quests = GetFilteredQuests();
             
@@ -129,7 +129,7 @@ public class MainWindow : Window, IDisposable
         var allQuests = QuestManager.GetAllQuests();
         return currentFilter switch
         {
-            QuestFilter.Active => allQuests.Where(q => !q.Completed).ToList(),
+            QuestFilter.Active => QuestManager.GetActiveQuests(),
             QuestFilter.Completed => allQuests.Where(q => q.Completed).ToList(),
             _ => allQuests
         };
@@ -137,37 +137,25 @@ public class MainWindow : Window, IDisposable
 
     private void DrawQuestItem(QuestData quest)
     {
-        // Quest header with type indicator
         var typeColor = GetQuestTypeColor(quest.Type);
         ImGui.PushStyleColor(ImGuiCol.Text, typeColor);
         ImGui.Text($"[{quest.Type}]");
         ImGui.PopStyleColor();
-        
-        ImGui.SameLine();
-        ImGui.TextWrapped($"{quest.Title}");
 
-        // Progress bar
-        float progress = quest.GoalCount > 0 ? (float)quest.CurrentCount / quest.GoalCount : 0f;
+        ImGui.SameLine();
+        ImGui.TextWrapped(quest.Title);
+
+        var progress = quest.GoalCount > 0 ? (float)quest.CurrentCount / quest.GoalCount : 0f;
         var progressColor = GetProgressColor(progress);
         ImGui.PushStyleColor(ImGuiCol.PlotHistogram, progressColor);
-        ImGui.ProgressBar(progress, new Vector2(-1, 20), $"{quest.CurrentCount}/{quest.GoalCount}");
+        ImGui.ProgressBar(progress, new Vector2(-1, 16), $"{quest.CurrentCount}/{quest.GoalCount}");
         ImGui.PopStyleColor();
 
-        // Completion status
-        if (quest.Completed && quest.CompletedAt.HasValue)
-        {
-            ImGui.TextColored(new Vector4(0.2f, 0.8f, 0.2f, 1.0f), 
-                $"✓ Completed: {quest.CompletedAt.Value:yyyy-MM-dd HH:mm}");
-        }
-
-        // Reset schedule indicator
         if (quest.ResetSchedule != ResetSchedule.None)
         {
-            ImGui.SameLine();
             ImGui.TextColored(new Vector4(0.7f, 0.7f, 1.0f, 1.0f), $"[{quest.ResetSchedule}]");
         }
 
-        // Buttons
         if (ImGui.Button($"Details##details{quest.Id}"))
         {
             selectedQuestForDetails = quest;
@@ -180,21 +168,13 @@ public class MainWindow : Window, IDisposable
         }
 
         ImGui.SameLine();
-        if (ImGui.Button($"Complete##complete{quest.Id}"))
-        {
-            QuestManager.MarkQuestComplete(quest.Id);
-        }
-
-        ImGui.SameLine();
         if (ImGui.Button($"Delete##delete{quest.Id}"))
         {
             QuestManager.RemoveQuest(quest.Id);
         }
 
-        ImGui.Spacing();
         ImGui.Separator();
     }
-
     private void DrawAddQuestDialog()
     {
         ImGui.Text("Add New Quest");
@@ -678,3 +658,4 @@ public readonly struct RewardColorOption
     public string Name { get; }
     public string? UnlockSecretTitle { get; }
 }
+

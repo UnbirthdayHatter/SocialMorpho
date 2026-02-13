@@ -95,6 +95,7 @@ async function handleUpdate(request, env) {
 
   const data = parsed.value;
   const key = toKey(data.character, data.world);
+  const characterOnlyKey = toCharacterOnlyKey(data.character);
   const record = {
     character: data.character,
     world: data.world,
@@ -104,6 +105,7 @@ async function handleUpdate(request, env) {
   };
 
   await env.TITLE_KV.put(key, JSON.stringify(record), { expirationTtl: TTL_SECONDS });
+  await env.TITLE_KV.put(characterOnlyKey, JSON.stringify(record), { expirationTtl: TTL_SECONDS });
   return json({ ok: true, record }, 200);
 }
 
@@ -115,7 +117,10 @@ async function handleGet(url, env) {
   }
 
   const key = toKey(character, world);
-  const raw = await env.TITLE_KV.get(key);
+  let raw = await env.TITLE_KV.get(key);
+  if (!raw) {
+    raw = await env.TITLE_KV.get(toCharacterOnlyKey(character));
+  }
   if (!raw) {
     return json({ ok: true, found: false }, 200);
   }
@@ -135,18 +140,42 @@ async function handleBatch(request, env) {
   }
 
   const keys = [];
+  const characterOnlyKeys = [];
   for (const p of players) {
     const character = sanitize(p?.character, MAX_NAME_LEN);
     const world = sanitize(p?.world, MAX_WORLD_LEN);
-    if (!character || !world) {
+    if (!character) {
       continue;
     }
-    keys.push(toKey(character, world));
+
+    if (world) {
+      keys.push(toKey(character, world));
+    }
+    characterOnlyKeys.push(toCharacterOnlyKey(character));
   }
 
   const uniqueKeys = [...new Set(keys)];
+  const uniqueCharacterOnlyKeys = [...new Set(characterOnlyKeys)];
+
   const rows = uniqueKeys.length ? await env.TITLE_KV.get(uniqueKeys, "json") : {};
-  return json({ ok: true, records: rows || {} }, 200);
+  const fallbackRows = uniqueCharacterOnlyKeys.length
+    ? await env.TITLE_KV.get(uniqueCharacterOnlyKeys, "json")
+    : {};
+
+  const merged = {};
+  for (const [k, v] of Object.entries(rows || {})) {
+    if (v) {
+      merged[k] = v;
+    }
+  }
+
+  for (const [k, v] of Object.entries(fallbackRows || {})) {
+    if (v) {
+      merged[k] = v;
+    }
+  }
+
+  return json({ ok: true, records: merged }, 200);
 }
 
 function normalizeUpdatePayload(body) {
@@ -189,6 +218,10 @@ function sanitize(value, maxLen) {
 
 function toKey(character, world) {
   return `title:${character.toLowerCase()}@${world.toLowerCase()}`;
+}
+
+function toCharacterOnlyKey(character) {
+  return `title:${character.toLowerCase()}`;
 }
 
 function json(payload, status) {
