@@ -48,6 +48,7 @@ public sealed class Plugin : IDalamudPlugin
     private QuestNotificationService QuestNotificationService { get; init; }
     private QuestOfferService QuestOfferService { get; init; }
     private TitleSyncService TitleSyncService { get; init; }
+    private HousingActivityService HousingActivityService { get; init; }
     private NameplateTitleService NameplateTitleService { get; init; }
 
     public Plugin(
@@ -108,6 +109,7 @@ public sealed class Plugin : IDalamudPlugin
         QuestOfferWindow = new QuestOfferWindow(this);
         QuestOfferService = new QuestOfferService(this, ClientState, ToastGui, PluginLog, QuestOfferWindow);
         TitleSyncService = new TitleSyncService(this, ClientState, ObjectTable, PluginLog);
+        HousingActivityService = new HousingActivityService(ClientState, PluginLog, OnHousingTerritoryEntered);
         NameplateTitleService = new NameplateTitleService(this, NamePlateGui, ObjectTable, TitleSyncService);
 
         WindowSystem.AddWindow(MainWindow);
@@ -170,24 +172,45 @@ public sealed class Plugin : IDalamudPlugin
             var newTitle = QuestManager.GetStats().UnlockedTitle;
             var leveledUp = !string.Equals(previousTitle, newTitle, StringComparison.Ordinal);
 
-            if (result != null)
-            {
-                ShowProgressToast(result);
-                if (result.CompletedNow && !leveledUp)
-                {
-                    PlayCustomSound("soft_bubble.wav");
-                }
-            }
-
-            if (leveledUp)
-            {
-                PlayCustomSound("cheery_tune.wav");
-                TitleSyncService.RequestPushSoon();
-            }
+            HandleQuestResultSideEffects(result, leveledUp);
         }
         catch (Exception ex)
         {
             PluginLog.Warning($"Error processing chat message for quest progress: {ex.Message}");
+        }
+    }
+
+    private void OnHousingTerritoryEntered()
+    {
+        try
+        {
+            var previousTitle = QuestManager.GetStats().UnlockedTitle;
+            var result = QuestManager.IncrementQuestProgressFromSystemEvent("housing_entered", "entered housing");
+            var newTitle = QuestManager.GetStats().UnlockedTitle;
+            var leveledUp = !string.Equals(previousTitle, newTitle, StringComparison.Ordinal);
+            HandleQuestResultSideEffects(result, leveledUp);
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warning($"Error processing housing activity: {ex.Message}");
+        }
+    }
+
+    private void HandleQuestResultSideEffects(ProgressUpdateResult? result, bool leveledUp)
+    {
+        if (result != null)
+        {
+            ShowProgressToast(result);
+            if (result.CompletedNow && !leveledUp)
+            {
+                PlayCustomSound("soft_bubble.wav");
+            }
+        }
+
+        if (leveledUp)
+        {
+            PlayCustomSound("cheery_tune.wav");
+            TitleSyncService.RequestPushSoon();
         }
     }
 
@@ -324,6 +347,7 @@ public sealed class Plugin : IDalamudPlugin
         QuestNotificationService?.Dispose();
         QuestOfferService?.Dispose();
         TitleSyncService?.Dispose();
+        HousingActivityService?.Dispose();
         NameplateTitleService?.Dispose();
         QuestOfferWindow?.Dispose();
         QuestTrackerWindow?.Dispose();

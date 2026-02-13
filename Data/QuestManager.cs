@@ -10,6 +10,28 @@ namespace SocialMorpho.Data;
 public class QuestManager
 {
     private const ulong DailyQuestIdBase = 900000;
+    private static readonly TimeSpan DuplicateChatDebounce = TimeSpan.FromSeconds(2);
+    private static readonly Dictionary<string, TimeSpan> EventCooldowns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["duty_completion"] = TimeSpan.FromSeconds(20),
+        ["helping_hand"] = TimeSpan.FromSeconds(20),
+        ["wonderous_friend"] = TimeSpan.FromSeconds(20),
+        ["party_join"] = TimeSpan.FromSeconds(60),
+        ["commendation"] = TimeSpan.FromSeconds(10),
+        ["housing_entered"] = TimeSpan.FromSeconds(30),
+        ["dote"] = TimeSpan.FromSeconds(2),
+        ["hug"] = TimeSpan.FromSeconds(2),
+        ["wave"] = TimeSpan.FromSeconds(2),
+        ["dance"] = TimeSpan.FromSeconds(2),
+        ["cheer"] = TimeSpan.FromSeconds(2),
+        ["bow"] = TimeSpan.FromSeconds(2),
+        ["salute"] = TimeSpan.FromSeconds(2),
+        ["thumbsup"] = TimeSpan.FromSeconds(2),
+        ["blowkiss"] = TimeSpan.FromSeconds(2),
+        ["battlestance"] = TimeSpan.FromSeconds(2),
+        ["victory"] = TimeSpan.FromSeconds(2),
+        ["spectacles"] = TimeSpan.FromSeconds(2),
+    };
     private static readonly List<TitleTier> BaseTitleTiers = new()
     {
         new TitleTier("New Adventurer", 0),
@@ -33,10 +55,16 @@ public class QuestManager
         new SecretTitleTier("Victory Lap", "victory", 40),
         new SecretTitleTier("Four Eyes", "spectacles", 40),
         new SecretTitleTier("Peer Reviewed", "commendation", 50),
+        new SecretTitleTier("Daily Grinder", "duty_completion", 200),
+        new SecretTitleTier("Guiding Light", "helping_hand", 50),
+        new SecretTitleTier("Take a Chance On Me", "wonderous_friend", 100),
+        new SecretTitleTier("Party Animal", "party_join", 200),
     };
 
     private readonly Configuration Configuration;
     private readonly Dictionary<ulong, QuestProgress> QuestProgress = new();
+    private readonly Dictionary<string, DateTime> lastEventSeenUtc = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTime> lastChatSeenUtc = new(StringComparer.OrdinalIgnoreCase);
     private static readonly List<DailySocialQuestTemplate> DailySocialQuestTemplates = new()
     {
         new DailySocialQuestTemplate("Sweet on You", "Have 3 different players use /dote on you", 3, new[] { "dotes on you", "dotes you" }, new[] { "Solo", "Party", "RP" }),
@@ -54,6 +82,11 @@ public class QuestManager
         new DailySocialQuestTemplate("Encore Please", "Have 3 different players use /cheer for you", 3, new[] { "cheers you on", "cheers for you" }, new[] { "Party" }),
         new DailySocialQuestTemplate("Polite Company", "Have 3 different players use /bow to you", 3, new[] { "bows to you" }, new[] { "RP" }),
         new DailySocialQuestTemplate("Fond Memories", "Receive 1 player commendation", 1, new[] { "commendation", "player commendation" }, new[] { "Solo", "Party", "RP" }),
+        new DailySocialQuestTemplate("Duty Roulette", "Complete any duty", 1, new[] { "completion time" }, new[] { "Party" }),
+        new DailySocialQuestTemplate("Helping Hand", "Help a first-timer clear a duty", 1, new[] { "one or more party members completed this duty for the first time" }, new[] { "Party" }),
+        new DailySocialQuestTemplate("Wonderous Friend", "Join a duty with at least one player who has not cleared it yet", 1, new[] { "one or more party members have yet to complete this duty" }, new[] { "Party" }),
+        new DailySocialQuestTemplate("Squad Goals", "Join a party", 1, new[] { "joined the party", "joins the party" }, new[] { "Party" }),
+        new DailySocialQuestTemplate("Home Sweet Home", "Enter a housing district or estate", 1, new[] { "entered housing" }, new[] { "Solo", "RP" }),
     };
 
     public QuestManager(Configuration configuration)
@@ -289,18 +322,35 @@ public class QuestManager
 
         var now = DateTime.Now;
         EnsureStatsBuckets(now);
-        var trackedEmote = TrackEmoteFromChat(normalizedLower: chatText.ToLowerInvariant());
 
         var normalized = chatText.Trim();
         var normalizedLower = normalized.ToLowerInvariant();
+        if (IsDuplicateChatLine(normalizedLower, now))
+        {
+            return null;
+        }
+
+        var trackedEvent = DetectTrackedEvent(normalizedLower);
+        if (!string.IsNullOrWhiteSpace(trackedEvent) && IsEventOnCooldown(trackedEvent, now))
+        {
+            return null;
+        }
+
+        var tracked = false;
+        if (!string.IsNullOrWhiteSpace(trackedEvent))
+        {
+            tracked = TrackActivityEvent(trackedEvent);
+        }
+
         var quest = Configuration.SavedQuests.FirstOrDefault(q =>
             !q.Completed &&
             IsQuestTriggeredByChat(q, normalized, normalizedLower));
 
         if (quest == null)
         {
-            if (trackedEmote)
+            if (tracked)
             {
+                MarkEventSeen(trackedEvent!, now);
                 Configuration.Save();
             }
             return null;
@@ -330,7 +380,76 @@ public class QuestManager
         }
 
         Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats);
+        if (!string.IsNullOrWhiteSpace(trackedEvent))
+        {
+            MarkEventSeen(trackedEvent, now);
+        }
 
+        Configuration.Save();
+        return new ProgressUpdateResult
+        {
+            QuestId = quest.Id,
+            QuestTitle = quest.Title,
+            QuestType = quest.Type,
+            Delta = delta,
+            NewCount = quest.CurrentCount,
+            GoalCount = quest.GoalCount,
+            CompletedNow = completedNow,
+        };
+    }
+
+    public ProgressUpdateResult? IncrementQuestProgressFromSystemEvent(string eventKey, string fallbackQuestText)
+    {
+        if (string.IsNullOrWhiteSpace(eventKey))
+        {
+            return null;
+        }
+
+        var now = DateTime.Now;
+        if (IsEventOnCooldown(eventKey, now))
+        {
+            return null;
+        }
+
+        TrackActivityEvent(eventKey);
+        MarkEventSeen(eventKey, now);
+
+        var normalized = fallbackQuestText?.Trim() ?? string.Empty;
+        var normalizedLower = normalized.ToLowerInvariant();
+        var quest = Configuration.SavedQuests.FirstOrDefault(q =>
+            !q.Completed &&
+            IsQuestTriggeredByChat(q, normalized, normalizedLower));
+        if (quest == null)
+        {
+            Configuration.Save();
+            return null;
+        }
+
+        var oldCount = quest.CurrentCount;
+        quest.CurrentCount = Math.Min(quest.GoalCount, quest.CurrentCount + 1);
+        var delta = Math.Max(0, quest.CurrentCount - oldCount);
+        if (delta <= 0)
+        {
+            Configuration.Save();
+            return null;
+        }
+
+        Configuration.Stats.TotalProgressTicks += delta;
+        var completedNow = false;
+        if (quest.CurrentCount >= quest.GoalCount)
+        {
+            quest.Completed = true;
+            quest.CompletedAt = now;
+            RegisterCompletion(now);
+            completedNow = true;
+
+            if (Configuration.CurrentDailyQuestIds.Contains(quest.Id))
+            {
+                ReplaceCompletedDailyQuest(quest.Id, now);
+            }
+        }
+
+        Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats);
         Configuration.Save();
         return new ProgressUpdateResult
         {
@@ -763,28 +882,65 @@ public class QuestManager
         }
     }
 
-    private bool TrackEmoteFromChat(string normalizedLower)
+    private bool TrackActivityEvent(string eventKey)
     {
-        var emote = DetectReceivedEmote(normalizedLower);
-        if (string.IsNullOrWhiteSpace(emote))
-        {
-            return false;
-        }
-
         EnsureStatsInitialized();
         var counts = Configuration.Stats.EmoteReceivedCounts;
-        counts.TryGetValue(emote, out var current);
-        counts[emote] = current + 1;
+        counts.TryGetValue(eventKey, out var current);
+        counts[eventKey] = current + 1;
         Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats);
         return true;
     }
 
-    private static string? DetectReceivedEmote(string chatLower)
+    private bool IsDuplicateChatLine(string normalizedLower, DateTime now)
+    {
+        if (this.lastChatSeenUtc.TryGetValue(normalizedLower, out var last) &&
+            now - last <= DuplicateChatDebounce)
+        {
+            return true;
+        }
+
+        this.lastChatSeenUtc[normalizedLower] = now;
+        return false;
+    }
+
+    private bool IsEventOnCooldown(string eventKey, DateTime now)
+    {
+        var cooldown = EventCooldowns.TryGetValue(eventKey, out var specific)
+            ? specific
+            : TimeSpan.FromSeconds(2);
+
+        if (this.lastEventSeenUtc.TryGetValue(eventKey, out var last) &&
+            now - last <= cooldown)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private void MarkEventSeen(string eventKey, DateTime now)
+    {
+        if (string.IsNullOrWhiteSpace(eventKey))
+        {
+            return;
+        }
+
+        this.lastEventSeenUtc[eventKey] = now;
+    }
+
+    private static string? DetectTrackedEvent(string chatLower)
     {
         if (string.IsNullOrWhiteSpace(chatLower))
         {
             return null;
         }
+
+        if (chatLower.Contains("completion time", StringComparison.OrdinalIgnoreCase)) return "duty_completion";
+        if (chatLower.Contains("one or more party members completed this duty for the first time", StringComparison.OrdinalIgnoreCase)) return "helping_hand";
+        if (chatLower.Contains("one or more party members have yet to complete this duty", StringComparison.OrdinalIgnoreCase)) return "wonderous_friend";
+        if (ContainsAny(chatLower, "you have joined the party", "joined the party", "joins the party")) return "party_join";
+        if (chatLower.Contains("commendation", StringComparison.OrdinalIgnoreCase)) return "commendation";
 
         var hasYou = chatLower.Contains(" you", StringComparison.Ordinal) ||
                      chatLower.EndsWith("you", StringComparison.Ordinal);
@@ -805,7 +961,6 @@ public class QuestManager
         if (ContainsAny(chatLower, "battle stance", "battlestance", "assumes a battle stance")) return "battlestance";
         if (ContainsAny(chatLower, "victory pose", "victory")) return "victory";
         if (ContainsAny(chatLower, "spectacles", "adjusts their spectacles")) return "spectacles";
-        if (chatLower.Contains("commendation", StringComparison.OrdinalIgnoreCase)) return "commendation";
 
         return null;
     }
