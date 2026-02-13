@@ -21,8 +21,10 @@ public sealed class Plugin : IDalamudPlugin
     public IDalamudPluginInterface PluginInterface { get; init; }
     private ICommandManager CommandManager { get; init; }
     private IClientState ClientState { get; init; }
+    private IObjectTable ObjectTable { get; init; }
     private IChatGui ChatGui { get; init; }
     private IToastGui ToastGui { get; init; }
+    private INamePlateGui NamePlateGui { get; init; }
     public IPluginLog PluginLog { get; init; }
     public ITextureProvider TextureProvider { get; init; }
     
@@ -36,21 +38,26 @@ public sealed class Plugin : IDalamudPlugin
     public QuestManager QuestManager { get; init; }
     private QuestNotificationService QuestNotificationService { get; init; }
     private QuestOfferService QuestOfferService { get; init; }
+    private NameplateTitleService NameplateTitleService { get; init; }
 
     public Plugin(
         IDalamudPluginInterface pluginInterface,
         ICommandManager commandManager,
         IClientState clientState,
+        IObjectTable objectTable,
         IChatGui chatGui,
         IToastGui toastGui,
+        INamePlateGui namePlateGui,
         IPluginLog pluginLog,
         ITextureProvider textureProvider)
     {
         PluginInterface = pluginInterface;
         CommandManager = commandManager;
         ClientState = clientState;
+        ObjectTable = objectTable;
         ChatGui = chatGui;
         ToastGui = toastGui;
+        NamePlateGui = namePlateGui;
         PluginLog = pluginLog;
         TextureProvider = textureProvider;
 
@@ -83,6 +90,7 @@ public sealed class Plugin : IDalamudPlugin
         QuestOfferWindow = new QuestOfferWindow(this);
         QuestInjector = new NativeQuestInjector(this, QuestManager);
         QuestOfferService = new QuestOfferService(this, ClientState, ToastGui, PluginLog, QuestOfferWindow);
+        NameplateTitleService = new NameplateTitleService(this, NamePlateGui, ObjectTable);
 
         WindowSystem.AddWindow(MainWindow);
         WindowSystem.AddWindow(QuestTrackerWindow);
@@ -163,15 +171,20 @@ public sealed class Plugin : IDalamudPlugin
 
     private void ShowProgressToast(ProgressUpdateResult result)
     {
+        if (!result.CompletedNow)
+        {
+            return;
+        }
+
         try
         {
-            var message = $"{result.QuestTitle} +{result.Delta} ({result.NewCount}/{result.GoalCount})";
+            var message = $"{result.QuestTitle} complete! ({result.NewCount}/{result.GoalCount})";
             ToastGui.ShowQuest(message, new QuestToastOptions
             {
-                Position = QuestToastPosition.Right,
+                Position = QuestToastPosition.Centre,
                 IconId = GetToastIconId(result.QuestType),
-                DisplayCheckmark = result.CompletedNow,
-                PlaySound = result.CompletedNow && Configuration.SoundEnabled,
+                DisplayCheckmark = true,
+                PlaySound = Configuration.SoundEnabled,
             });
         }
         catch (Exception ex)
@@ -182,15 +195,14 @@ public sealed class Plugin : IDalamudPlugin
 
     private static uint GetToastIconId(QuestType type)
     {
-        // Pink-leaning native icon for SocialMorpho toast accent.
-        const uint PinkAccentIconId = 61414u;
+        const uint SocialMorphoDefaultIconId = 63926u;
 
         return type switch
         {
             QuestType.Buff => 61413u,
-            QuestType.Emote => PinkAccentIconId,
-            QuestType.Custom => PinkAccentIconId,
-            _ => PinkAccentIconId,
+            QuestType.Emote => SocialMorphoDefaultIconId,
+            QuestType.Custom => SocialMorphoDefaultIconId,
+            _ => SocialMorphoDefaultIconId,
         };
     }
 
@@ -256,6 +268,7 @@ public sealed class Plugin : IDalamudPlugin
 
         QuestNotificationService?.Dispose();
         QuestOfferService?.Dispose();
+        NameplateTitleService?.Dispose();
         QuestInjector?.Dispose();
         QuestOfferWindow?.Dispose();
         QuestTrackerWindow?.Dispose();
@@ -291,5 +304,10 @@ public sealed class Plugin : IDalamudPlugin
         {
             PluginLog.Warning($"Failed to show toast icon preview: {ex.Message}");
         }
+    }
+
+    public void RefreshNameplateTitlePreview()
+    {
+        NameplateTitleService.RequestRedraw();
     }
 }

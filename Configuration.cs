@@ -23,6 +23,8 @@ public class Configuration : IPluginConfiguration
     public List<string> ProcessedQuestOfferIds { get; set; } = new();
     public string ActiveQuestPreset { get; set; } = "Solo";
     public SocialStats Stats { get; set; } = new();
+    public bool ShowRewardTitleOnNameplate { get; set; } = false;
+    public string RewardTitleColorPreset { get; set; } = "Gold";
 
     // Quest Tracker settings
     public bool ShowQuestTracker { get; set; } = true;

@@ -302,7 +302,10 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
         bool showQuestTracker = Plugin.Configuration.ShowQuestTracker;
         bool showQuestTrackerOnLogin = Plugin.Configuration.ShowQuestTrackerOnLogin;
         bool showLoginNotification = Plugin.Configuration.ShowLoginNotification;
+        bool showRewardTitleOnNameplate = Plugin.Configuration.ShowRewardTitleOnNameplate;
+        var rewardTitleColorPreset = Plugin.Configuration.RewardTitleColorPreset;
         var presetOptions = new[] { "Solo", "Party", "RP" };
+        var titleColorOptions = new[] { "Gold", "Pink", "Cyan" };
 
         if (ImGui.Checkbox("Sound Enabled", ref soundEnabled))
         {
@@ -344,6 +347,35 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
         {
             Plugin.Configuration.ShowLoginNotification = showLoginNotification;
             Plugin.Configuration.Save();
+        }
+
+        if (ImGui.Checkbox("Show Reward Title Above Name", ref showRewardTitleOnNameplate))
+        {
+            Plugin.Configuration.ShowRewardTitleOnNameplate = showRewardTitleOnNameplate;
+            Plugin.Configuration.Save();
+            Plugin.RefreshNameplateTitlePreview();
+        }
+
+        if (ImGui.BeginCombo("Reward Title Color", rewardTitleColorPreset))
+        {
+            foreach (var option in titleColorOptions)
+            {
+                var selected = rewardTitleColorPreset == option;
+                if (ImGui.Selectable(option, selected))
+                {
+                    rewardTitleColorPreset = option;
+                    Plugin.Configuration.RewardTitleColorPreset = option;
+                    Plugin.Configuration.Save();
+                    Plugin.RefreshNameplateTitlePreview();
+                }
+
+                if (selected)
+                {
+                    ImGui.SetItemDefaultFocus();
+                }
+            }
+
+            ImGui.EndCombo();
         }
 
         ImGui.Spacing();
