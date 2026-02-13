@@ -21,6 +21,8 @@ public class Configuration : IPluginConfiguration
     public List<ulong> CurrentDailyQuestIds { get; set; } = new();
     public DateTime? LastQuestOfferPopupDate { get; set; }
     public List<string> ProcessedQuestOfferIds { get; set; } = new();
+    public string ActiveQuestPreset { get; set; } = "Solo";
+    public SocialStats Stats { get; set; } = new();
 
     // Quest Tracker settings
     public bool ShowQuestTracker { get; set; } = true;

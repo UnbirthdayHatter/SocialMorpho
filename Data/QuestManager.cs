@@ -9,25 +9,26 @@ namespace SocialMorpho.Data;
 public class QuestManager
 {
     private const ulong DailyQuestIdBase = 900000;
-    private Configuration Configuration;
-    private Dictionary<ulong, QuestProgress> QuestProgress = new();
+    private readonly Configuration Configuration;
+    private readonly Dictionary<ulong, QuestProgress> QuestProgress = new();
     private static readonly List<DailySocialQuestTemplate> DailySocialQuestTemplates = new()
     {
-        new DailySocialQuestTemplate("Sweet on You", "Have 3 different players use /dote on you", 3, new[] { "dotes on you", "dotes you" }),
-        new DailySocialQuestTemplate("Spread the Love", "Have 3 different players use /hug on you", 3, new[] { "hugs you" }),
-        new DailySocialQuestTemplate("Kiss Blown Your Way", "Have 3 different players use /blowkiss on you", 3, new[] { "blows you a kiss", "blow kisses you" }),
-        new DailySocialQuestTemplate("Dance Fever", "Have 3 different players use /dance with you", 3, new[] { "dances with you", "dances for you" }),
-        new DailySocialQuestTemplate("Friendly Faces", "Have 3 different players use /wave to you", 3, new[] { "waves to you" }),
-        new DailySocialQuestTemplate("Hype Circle", "Have 3 different players use /cheer for you", 3, new[] { "cheers you on", "cheers for you" }),
-        new DailySocialQuestTemplate("Bow Trio", "Have 3 different players use /bow to you", 3, new[] { "bows to you" }),
-        new DailySocialQuestTemplate("Respect Given", "Have 3 different players use /salute to you", 3, new[] { "salutes you" }),
-        new DailySocialQuestTemplate("Good Vibes Only", "Have 3 different players use /thumbsup to you", 3, new[] { "gives you a thumbs up", "gives you the thumbs up" }),
+        new DailySocialQuestTemplate("Sweet on You", "Have 3 different players use /dote on you", 3, new[] { "dotes on you", "dotes you" }, new[] { "Solo", "Party", "RP" }),
+        new DailySocialQuestTemplate("Spread the Love", "Have 3 different players use /hug on you", 3, new[] { "hugs you" }, new[] { "Solo", "Party", "RP" }),
+        new DailySocialQuestTemplate("Kiss Blown Your Way", "Have 3 different players use /blowkiss on you", 3, new[] { "blows you a kiss", "blow kisses you" }, new[] { "Solo", "RP" }),
+        new DailySocialQuestTemplate("Dance Fever", "Have 3 different players use /dance with you", 3, new[] { "dances with you", "dances for you" }, new[] { "Party", "RP" }),
+        new DailySocialQuestTemplate("Friendly Faces", "Have 3 different players use /wave to you", 3, new[] { "waves to you" }, new[] { "Solo", "Party", "RP" }),
+        new DailySocialQuestTemplate("Hype Circle", "Have 3 different players use /cheer for you", 3, new[] { "cheers you on", "cheers for you" }, new[] { "Party", "RP" }),
+        new DailySocialQuestTemplate("Bow Trio", "Have 3 different players use /bow to you", 3, new[] { "bows to you" }, new[] { "Solo", "RP" }),
+        new DailySocialQuestTemplate("Respect Given", "Have 3 different players use /salute to you", 3, new[] { "salutes you" }, new[] { "Party", "RP" }),
+        new DailySocialQuestTemplate("Good Vibes Only", "Have 3 different players use /thumbsup to you", 3, new[] { "gives you a thumbs up", "gives you the thumbs up" }, new[] { "Solo", "Party" }),
     };
 
     public QuestManager(Configuration configuration)
     {
         Configuration = configuration;
         LoadProgressFromConfig();
+        EnsureStatsBuckets(DateTime.Now);
     }
 
     private void LoadProgressFromConfig()
@@ -80,10 +81,11 @@ public class QuestManager
     public void MarkQuestComplete(ulong questId)
     {
         var quest = GetQuest(questId);
-        if (quest != null)
+        if (quest != null && !quest.Completed)
         {
             quest.Completed = true;
             quest.CompletedAt = DateTime.Now;
+            RegisterCompletion(DateTime.Now);
             Configuration.Save();
         }
     }
@@ -223,15 +225,23 @@ public class QuestManager
 
     public bool IncrementDoteQuestProgress()
     {
-        return IncrementQuestProgressFromChat("dotes on you");
+        return IncrementQuestProgressFromChatDetailed("dotes on you") != null;
     }
 
     public bool IncrementQuestProgressFromChat(string chatText)
     {
+        return IncrementQuestProgressFromChatDetailed(chatText) != null;
+    }
+
+    public ProgressUpdateResult? IncrementQuestProgressFromChatDetailed(string chatText)
+    {
         if (string.IsNullOrWhiteSpace(chatText))
         {
-            return false;
+            return null;
         }
+
+        var now = DateTime.Now;
+        EnsureStatsBuckets(now);
 
         var normalized = chatText.Trim();
         var quest = Configuration.SavedQuests.FirstOrDefault(q =>
@@ -240,18 +250,38 @@ public class QuestManager
 
         if (quest == null)
         {
-            return false;
+            return null;
         }
 
+        var oldCount = quest.CurrentCount;
         quest.CurrentCount = Math.Min(quest.GoalCount, quest.CurrentCount + 1);
+        var delta = Math.Max(0, quest.CurrentCount - oldCount);
+        if (delta <= 0)
+        {
+            return null;
+        }
+
+        Configuration.Stats.TotalProgressTicks += delta;
+        var completedNow = false;
         if (quest.CurrentCount >= quest.GoalCount)
         {
             quest.Completed = true;
-            quest.CompletedAt = DateTime.Now;
+            quest.CompletedAt = now;
+            RegisterCompletion(now);
+            completedNow = true;
         }
 
         Configuration.Save();
-        return true;
+        return new ProgressUpdateResult
+        {
+            QuestId = quest.Id,
+            QuestTitle = quest.Title,
+            QuestType = quest.Type,
+            Delta = delta,
+            NewCount = quest.CurrentCount,
+            GoalCount = quest.GoalCount,
+            CompletedNow = completedNow,
+        };
     }
 
     public void EnsureDailySocialQuests(DateTime now)
@@ -267,8 +297,17 @@ public class QuestManager
 
         RemovePreviousDailyQuests();
 
+        var preset = string.IsNullOrWhiteSpace(Configuration.ActiveQuestPreset) ? "Solo" : Configuration.ActiveQuestPreset;
         var rng = new Random(now.Date.GetHashCode());
-        var selectedTemplates = DailySocialQuestTemplates
+        var pool = DailySocialQuestTemplates
+            .Where(t => t.Presets.Contains(preset, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        if (pool.Count < 3)
+        {
+            pool = DailySocialQuestTemplates.ToList();
+        }
+
+        var selectedTemplates = pool
             .OrderBy(_ => rng.Next())
             .Take(3)
             .ToList();
@@ -299,6 +338,178 @@ public class QuestManager
         Configuration.LastDailyQuestSelectionDate = now.Date;
         Configuration.CurrentDailyQuestIds = selectedQuestIds;
         Configuration.Save();
+    }
+
+    public (bool success, string message) ExportQuestPack(string configDirectory)
+    {
+        try
+        {
+            var exportPath = Path.Combine(configDirectory, "QuestPack.export.json");
+            var quests = Configuration.SavedQuests
+                .Where(q => !Configuration.CurrentDailyQuestIds.Contains(q.Id))
+                .ToList();
+
+            var pack = new QuestPackFile
+            {
+                Name = "SocialMorpho Quest Pack",
+                ExportedAt = DateTime.UtcNow.ToString("O"),
+                Quests = quests,
+            };
+
+            var json = JsonSerializer.Serialize(pack, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(exportPath, json);
+            return (true, $"Exported {quests.Count} quest(s) to {exportPath}");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Export failed: {ex.Message}");
+        }
+    }
+
+    public (bool success, string message) ImportQuestPack(string configDirectory)
+    {
+        try
+        {
+            var importPath = Path.Combine(configDirectory, "QuestPack.import.json");
+            if (!File.Exists(importPath))
+            {
+                return (false, $"Import file not found: {importPath}");
+            }
+
+            var json = File.ReadAllText(importPath);
+            var pack = JsonSerializer.Deserialize<QuestPackFile>(json);
+            if (pack?.Quests == null || pack.Quests.Count == 0)
+            {
+                return (false, "Import file has no quests.");
+            }
+
+            var added = 0;
+            var skipped = 0;
+            var nextId = Configuration.SavedQuests.Count > 0 ? Configuration.SavedQuests.Max(q => q.Id) + 1UL : 100UL;
+            foreach (var q in pack.Quests)
+            {
+                if (string.IsNullOrWhiteSpace(q.Title) || q.GoalCount <= 0)
+                {
+                    skipped++;
+                    continue;
+                }
+
+                if (Configuration.SavedQuests.Any(existing => existing.Id == q.Id))
+                {
+                    q.Id = nextId++;
+                }
+
+                q.CurrentCount = 0;
+                q.Completed = false;
+                q.CompletedAt = null;
+                Configuration.SavedQuests.Add(q);
+                added++;
+            }
+
+            Configuration.Save();
+            return (true, $"Imported {added} quest(s), skipped {skipped}. Source: {importPath}");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Import failed: {ex.Message}");
+        }
+    }
+
+    public void ForceRerollDailyQuests(DateTime now)
+    {
+        Configuration.LastDailyQuestSelectionDate = null;
+        EnsureDailySocialQuests(now);
+    }
+
+    public SocialStats GetStats()
+    {
+        EnsureStatsBuckets(DateTime.Now);
+        return Configuration.Stats;
+    }
+
+    private void RegisterCompletion(DateTime now)
+    {
+        EnsureStatsBuckets(now);
+
+        var stats = Configuration.Stats;
+        stats.TotalCompletions++;
+        stats.WeeklyCompletions++;
+        stats.WeeklyRank = GetWeeklyRank(stats.WeeklyCompletions);
+        stats.UnlockedTitle = GetUnlockedTitle(stats.TotalCompletions);
+
+        if (stats.LastCompletionDate.HasValue)
+        {
+            var diff = (now.Date - stats.LastCompletionDate.Value.Date).Days;
+            if (diff == 0)
+            {
+                // same-day completion does not change streak day count
+            }
+            else if (diff == 1)
+            {
+                stats.CurrentStreakDays++;
+            }
+            else
+            {
+                stats.CurrentStreakDays = 1;
+            }
+        }
+        else
+        {
+            stats.CurrentStreakDays = 1;
+        }
+
+        if (stats.CurrentStreakDays > stats.BestStreakDays)
+        {
+            stats.BestStreakDays = stats.CurrentStreakDays;
+        }
+
+        stats.LastCompletionDate = now;
+
+        var todayKey = now.ToString("yyyy-MM-dd");
+        var todayEntry = stats.RecentDailyCompletions.FirstOrDefault(e => e.Date == todayKey);
+        if (todayEntry == null)
+        {
+            stats.RecentDailyCompletions.Add(new DailyCompletionEntry { Date = todayKey, Count = 1 });
+        }
+        else
+        {
+            todayEntry.Count++;
+        }
+
+        // Keep last 14 days for lightweight local analytics.
+        stats.RecentDailyCompletions = stats.RecentDailyCompletions
+            .OrderByDescending(e => e.Date)
+            .Take(14)
+            .OrderBy(e => e.Date)
+            .ToList();
+    }
+
+    private void EnsureStatsBuckets(DateTime now)
+    {
+        var stats = Configuration.Stats;
+        var monday = now.Date.AddDays(-(((int)now.DayOfWeek + 6) % 7));
+        if (stats.WeeklyBucketStart != monday)
+        {
+            stats.WeeklyBucketStart = monday;
+            stats.WeeklyCompletions = 0;
+            stats.WeeklyRank = GetWeeklyRank(0);
+        }
+    }
+
+    private static string GetWeeklyRank(int weeklyCompletions)
+    {
+        if (weeklyCompletions >= 10) return "Golden Heart";
+        if (weeklyCompletions >= 5) return "Silver Socialite";
+        if (weeklyCompletions >= 1) return "Bronze Butterfly";
+        return "Sproutling";
+    }
+
+    private static string GetUnlockedTitle(int totalCompletions)
+    {
+        if (totalCompletions >= 75) return "Heart of Eorzea";
+        if (totalCompletions >= 30) return "Social Star";
+        if (totalCompletions >= 10) return "Budding Friend";
+        return "New Adventurer";
     }
 
     private void RefreshDailyQuestTitles()
@@ -357,16 +568,25 @@ public class QuestFile
 
 public class DailySocialQuestTemplate
 {
-    public DailySocialQuestTemplate(string title, string description, int goalCount, IEnumerable<string> triggerPhrases)
+    public DailySocialQuestTemplate(string title, string description, int goalCount, IEnumerable<string> triggerPhrases, IEnumerable<string> presets)
     {
         Title = title;
         Description = description;
         GoalCount = goalCount;
         TriggerPhrases = triggerPhrases.ToArray();
+        Presets = presets.ToArray();
     }
 
     public string Title { get; }
     public string Description { get; }
     public int GoalCount { get; }
     public string[] TriggerPhrases { get; }
+    public string[] Presets { get; }
+}
+
+public class QuestPackFile
+{
+    public string Name { get; set; } = "SocialMorpho Quest Pack";
+    public string ExportedAt { get; set; } = string.Empty;
+    public List<QuestData> Quests { get; set; } = new();
 }

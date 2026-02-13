@@ -1,4 +1,5 @@
 using Dalamud.Game.Command;
+using Dalamud.Game.Gui.Toast;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Interface.Windowing;
@@ -140,16 +141,57 @@ public sealed class Plugin : IDalamudPlugin
             if (text.Contains("dotes on you", StringComparison.OrdinalIgnoreCase) ||
                 text.Contains("dotes you", StringComparison.OrdinalIgnoreCase))
             {
-                QuestManager.IncrementDoteQuestProgress();
+                var doteResult = QuestManager.IncrementQuestProgressFromChatDetailed(text);
+                if (doteResult != null)
+                {
+                    ShowProgressToast(doteResult);
+                }
                 return;
             }
 
-            QuestManager.IncrementQuestProgressFromChat(text);
+            var result = QuestManager.IncrementQuestProgressFromChatDetailed(text);
+            if (result != null)
+            {
+                ShowProgressToast(result);
+            }
         }
         catch (Exception ex)
         {
             PluginLog.Warning($"Error processing chat message for quest progress: {ex.Message}");
         }
+    }
+
+    private void ShowProgressToast(ProgressUpdateResult result)
+    {
+        try
+        {
+            var message = $"{result.QuestTitle} +{result.Delta} ({result.NewCount}/{result.GoalCount})";
+            ToastGui.ShowQuest(message, new QuestToastOptions
+            {
+                Position = QuestToastPosition.Right,
+                IconId = GetToastIconId(result.QuestType),
+                DisplayCheckmark = result.CompletedNow,
+                PlaySound = result.CompletedNow && Configuration.SoundEnabled,
+            });
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warning($"Failed to show progress toast: {ex.Message}");
+        }
+    }
+
+    private static uint GetToastIconId(QuestType type)
+    {
+        // Pink-leaning native icon for SocialMorpho toast accent.
+        const uint PinkAccentIconId = 61414u;
+
+        return type switch
+        {
+            QuestType.Buff => 61413u,
+            QuestType.Emote => PinkAccentIconId,
+            QuestType.Custom => PinkAccentIconId,
+            _ => PinkAccentIconId,
+        };
     }
 
     private void MigrateDoteQuestText()
@@ -226,6 +268,28 @@ public sealed class Plugin : IDalamudPlugin
         if (!QuestOfferService.TriggerTestOfferPopup())
         {
             PluginLog.Warning("No quest offer available for manual popup test.");
+        }
+    }
+
+    public void TriggerToastIconPreview()
+    {
+        try
+        {
+            var previewIcons = new[] { 61412u, 61413u, 61414u };
+            foreach (var icon in previewIcons)
+            {
+                ToastGui.ShowQuest($"SocialMorpho Icon Preview ({icon})", new Dalamud.Game.Gui.Toast.QuestToastOptions
+                {
+                    Position = Dalamud.Game.Gui.Toast.QuestToastPosition.Right,
+                    IconId = icon,
+                    DisplayCheckmark = false,
+                    PlaySound = false,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warning($"Failed to show toast icon preview: {ex.Message}");
         }
     }
 }

@@ -4,6 +4,7 @@ using SocialMorpho.Data;
 using System;
 using System.Numerics;
 using System.Linq;
+using System.IO;
 
 namespace SocialMorpho.Windows;
 
@@ -21,11 +22,14 @@ public class MainWindow : Window, IDisposable
     private int newQuestGoalCount = 1;
     private ResetSchedule newQuestResetSchedule = ResetSchedule.None;
     private QuestData? selectedQuestForDetails = null;
+    private string presetSelection = string.Empty;
+    private string packStatusMessage = string.Empty;
 
     public MainWindow(Plugin plugin, QuestManager questManager) : base("Social Morpho##MainWindow")
     {
         Plugin = plugin;
         QuestManager = questManager;
+        presetSelection = string.IsNullOrWhiteSpace(plugin.Configuration.ActiveQuestPreset) ? "Solo" : plugin.Configuration.ActiveQuestPreset;
 
         Size = new Vector2(500, 700);
         SizeCondition = ImGuiCond.FirstUseEver;
@@ -298,6 +302,7 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
         bool showQuestTracker = Plugin.Configuration.ShowQuestTracker;
         bool showQuestTrackerOnLogin = Plugin.Configuration.ShowQuestTrackerOnLogin;
         bool showLoginNotification = Plugin.Configuration.ShowLoginNotification;
+        var presetOptions = new[] { "Solo", "Party", "RP" };
 
         if (ImGui.Checkbox("Sound Enabled", ref soundEnabled))
         {
@@ -342,10 +347,40 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
         }
 
         ImGui.Spacing();
+        ImGui.Text("Daily Quest Preset");
+        if (ImGui.BeginCombo("##preset", presetSelection))
+        {
+            foreach (var option in presetOptions)
+            {
+                var selected = presetSelection == option;
+                if (ImGui.Selectable(option, selected))
+                {
+                    presetSelection = option;
+                    Plugin.Configuration.ActiveQuestPreset = option;
+                    Plugin.Configuration.Save();
+                }
+
+                if (selected)
+                {
+                    ImGui.SetItemDefaultFocus();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        if (ImGui.Button("Re-roll Daily Quests Now"))
+        {
+            QuestManager.ForceRerollDailyQuests(DateTime.Now);
+            packStatusMessage = "Daily quests re-rolled for current preset.";
+        }
+
+        ImGui.Spacing();
 
         if (ImGui.Button("Reload Quests from JSON"))
         {
             QuestManager.LoadQuestsFromJson(Plugin.PluginInterface.ConfigDirectory.FullName);
+            packStatusMessage = "Reloaded quests from Quests.json.";
         }
 
         ImGui.SameLine();
@@ -357,6 +392,56 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
         if (ImGui.Button("Test Quest Popup"))
         {
             Plugin.TriggerQuestOfferTest();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Test Toast Icons"))
+        {
+            Plugin.TriggerToastIconPreview();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Export Quest Pack"))
+        {
+            var result = QuestManager.ExportQuestPack(Plugin.PluginInterface.ConfigDirectory.FullName);
+            packStatusMessage = result.message;
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Import Quest Pack"))
+        {
+            var result = QuestManager.ImportQuestPack(Plugin.PluginInterface.ConfigDirectory.FullName);
+            packStatusMessage = result.message;
+        }
+
+        if (!string.IsNullOrWhiteSpace(packStatusMessage))
+        {
+            ImGui.TextWrapped(packStatusMessage);
+        }
+
+        var importPath = Path.Combine(Plugin.PluginInterface.ConfigDirectory.FullName, "QuestPack.import.json");
+        ImGui.TextDisabled($"Import path: {importPath}");
+
+        if (ImGui.CollapsingHeader("Analytics"))
+        {
+            var stats = QuestManager.GetStats();
+            ImGui.Text($"Unlocked Title: {stats.UnlockedTitle}");
+            ImGui.Text($"Weekly Rank: {stats.WeeklyRank}");
+            ImGui.Text($"Total Progress Ticks: {stats.TotalProgressTicks}");
+            ImGui.Text($"Total Completions: {stats.TotalCompletions}");
+            ImGui.Text($"Current Streak: {stats.CurrentStreakDays} day(s)");
+            ImGui.Text($"Best Streak: {stats.BestStreakDays} day(s)");
+            ImGui.Text($"Weekly Completions: {stats.WeeklyCompletions}");
+
+            if (stats.RecentDailyCompletions.Count > 0)
+            {
+                ImGui.Separator();
+                ImGui.Text("Last 14 days:");
+                foreach (var day in stats.RecentDailyCompletions)
+                {
+                    ImGui.Text($"{day.Date}: {day.Count}");
+                }
+            }
         }
     }
 
