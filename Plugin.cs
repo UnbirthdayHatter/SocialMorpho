@@ -36,7 +36,6 @@ public sealed class Plugin : IDalamudPlugin
     private MainWindow MainWindow { get; init; }
     public QuestTrackerWindow QuestTrackerWindow { get; init; }
     private QuestOfferWindow QuestOfferWindow { get; init; }
-    private NativeQuestInjector QuestInjector { get; init; }
     public QuestManager QuestManager { get; init; }
     private QuestNotificationService QuestNotificationService { get; init; }
     private QuestOfferService QuestOfferService { get; init; }
@@ -92,7 +91,6 @@ public sealed class Plugin : IDalamudPlugin
         MainWindow = new MainWindow(this, QuestManager);
         QuestTrackerWindow = new QuestTrackerWindow(this, QuestManager);
         QuestOfferWindow = new QuestOfferWindow(this);
-        QuestInjector = new NativeQuestInjector(this, QuestManager);
         QuestOfferService = new QuestOfferService(this, ClientState, ToastGui, PluginLog, QuestOfferWindow);
         NameplateTitleService = new NameplateTitleService(this, NamePlateGui, ObjectTable);
 
@@ -273,7 +271,6 @@ public sealed class Plugin : IDalamudPlugin
         QuestNotificationService?.Dispose();
         QuestOfferService?.Dispose();
         NameplateTitleService?.Dispose();
-        QuestInjector?.Dispose();
         QuestOfferWindow?.Dispose();
         QuestTrackerWindow?.Dispose();
 
@@ -324,6 +321,14 @@ public sealed class Plugin : IDalamudPlugin
 
         // Hide during loading/zone transition to match native UI feel.
         if (Condition[ConditionFlag.BetweenAreas] || Condition[ConditionFlag.BetweenAreas51])
+        {
+            return true;
+        }
+
+        // Hide during any cutscene-like state for better immersion.
+        if (Condition[ConditionFlag.WatchingCutscene] ||
+            Condition[ConditionFlag.WatchingCutscene78] ||
+            Condition[ConditionFlag.OccupiedInCutSceneEvent])
         {
             return true;
         }
