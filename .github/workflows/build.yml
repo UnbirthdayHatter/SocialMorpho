@@ -78,6 +78,15 @@ jobs:
             }
           }
 
+          $audioFiles = @("cheery_tune.wav", "soft_bubble.wav")
+          foreach ($audio in $audioFiles) {
+            $src = "Resources/$audio"
+            if (Test-Path $src) {
+              New-Item -ItemType Directory -Force -Path "$releaseDir/Resources" | Out-Null
+              Copy-Item $src -Destination "$releaseDir/Resources/$audio"
+            }
+          }
+
 
           if (Test-Path "$outputDir/Quests.json") {
             Copy-Item "$outputDir/Quests.json" -Destination $releaseDir
@@ -94,7 +103,15 @@ jobs:
           $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
           try {
             $entries = @($zip.Entries | ForEach-Object { $_.FullName })
-            $required = @("SocialMorpho.dll", "SocialMorpho.json", "Resources/quest_icon.png", "Resources/aCmbspI.png", "Resources/Square.png")
+            $required = @(
+              "SocialMorpho.dll",
+              "SocialMorpho.json",
+              "Resources/quest_icon.png",
+              "Resources/aCmbspI.png",
+              "Resources/Square.png",
+              "Resources/cheery_tune.wav",
+              "Resources/soft_bubble.wav"
+            )
 
             foreach ($file in $required) {
               if ($entries -notcontains $file) {
@@ -181,6 +198,8 @@ jobs:
           unzip -Z1 latest.zip | grep -qx "Resources/quest_icon.png"
           unzip -Z1 latest.zip | grep -qx "Resources/aCmbspI.png"
           unzip -Z1 latest.zip | grep -qx "Resources/Square.png"
+          unzip -Z1 latest.zip | grep -qx "Resources/cheery_tune.wav"
+          unzip -Z1 latest.zip | grep -qx "Resources/soft_bubble.wav"
           if unzip -Z1 latest.zip | grep -qx "latest.zip"; then
             echo "Invalid latest.zip: nested latest.zip found"
             exit 1
