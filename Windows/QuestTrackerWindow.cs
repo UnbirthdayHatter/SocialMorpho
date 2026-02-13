@@ -97,6 +97,11 @@ public class QuestTrackerWindow : Window
 
     public override void Draw()
     {
+        if (this.Plugin.ShouldHideQuestOverlay())
+        {
+            return;
+        }
+
         var activeQuests = this.QuestManager.GetActiveQuests();
         if (activeQuests.Count == 0)
             return;

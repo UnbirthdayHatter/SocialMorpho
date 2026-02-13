@@ -1,4 +1,5 @@
 using Dalamud.Game.Command;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Gui.Toast;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
@@ -21,6 +22,7 @@ public sealed class Plugin : IDalamudPlugin
     public IDalamudPluginInterface PluginInterface { get; init; }
     private ICommandManager CommandManager { get; init; }
     private IClientState ClientState { get; init; }
+    private ICondition Condition { get; init; }
     private IObjectTable ObjectTable { get; init; }
     private IChatGui ChatGui { get; init; }
     private IToastGui ToastGui { get; init; }
@@ -44,6 +46,7 @@ public sealed class Plugin : IDalamudPlugin
         IDalamudPluginInterface pluginInterface,
         ICommandManager commandManager,
         IClientState clientState,
+        ICondition condition,
         IObjectTable objectTable,
         IChatGui chatGui,
         IToastGui toastGui,
@@ -54,6 +57,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface = pluginInterface;
         CommandManager = commandManager;
         ClientState = clientState;
+        Condition = condition;
         ObjectTable = objectTable;
         ChatGui = chatGui;
         ToastGui = toastGui;
@@ -309,5 +313,21 @@ public sealed class Plugin : IDalamudPlugin
     public void RefreshNameplateTitlePreview()
     {
         NameplateTitleService.RequestRedraw();
+    }
+
+    public bool ShouldHideQuestOverlay()
+    {
+        if (!ClientState.IsLoggedIn)
+        {
+            return true;
+        }
+
+        // Hide during loading/zone transition to match native UI feel.
+        if (Condition[ConditionFlag.BetweenAreas] || Condition[ConditionFlag.BetweenAreas51])
+        {
+            return true;
+        }
+
+        return false;
     }
 }
