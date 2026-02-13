@@ -51,7 +51,10 @@ public class MainWindow : Window, IDisposable
             DrawQuestList();
             ImGui.Spacing();
             ImGui.Separator();
-            DrawSettings();
+            if (ImGui.CollapsingHeader("Settings & Analytics"))
+            {
+                DrawSettings();
+            }
         }
     }
 
@@ -294,9 +297,6 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
 
     private void DrawSettings()
     {
-        ImGui.Text("Settings");
-        ImGui.Spacing();
-
         bool soundEnabled = Plugin.Configuration.SoundEnabled;
         float panelOpacity = Plugin.Configuration.PanelOpacity;
         bool showQuestTracker = Plugin.Configuration.ShowQuestTracker;
@@ -331,7 +331,7 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
         var settingsHeight = MathF.Max(220f, ImGui.GetContentRegionAvail().Y);
         if (ImGui.BeginChild("##SettingsScroll", new Vector2(0f, settingsHeight), true))
         {
-            if (ImGui.CollapsingHeader("Title Progress", ImGuiTreeNodeFlags.DefaultOpen))
+            if (ImGui.CollapsingHeader("Title Progress"))
             {
                 ImGui.Text($"Current Title: {titleProgress.CurrentTitle}");
                 ImGui.Text($"Next Title: {titleProgress.NextTitle}");
@@ -343,7 +343,7 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
                 ImGui.TextDisabled($"{titleProgress.RemainingToNext} completion(s) remaining");
             }
 
-            if (ImGui.CollapsingHeader("Tracker", ImGuiTreeNodeFlags.DefaultOpen))
+            if (ImGui.CollapsingHeader("Tracker"))
             {
                 if (ImGui.Checkbox("Show Quest Tracker Overlay", ref showQuestTracker))
                 {
@@ -374,7 +374,7 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
                 }
             }
 
-            if (ImGui.CollapsingHeader("Audio", ImGuiTreeNodeFlags.DefaultOpen))
+            if (ImGui.CollapsingHeader("Audio"))
             {
                 if (ImGui.Checkbox("Sound Enabled", ref soundEnabled))
                 {
@@ -502,6 +502,17 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
                 }
 
                 ImGui.SameLine();
+                if (ImGui.Button("Test Quest Complete Sound"))
+                {
+                    Plugin.TestQuestCompleteSound();
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("Test Level Up Sound"))
+                {
+                    Plugin.TestLevelUpSound();
+                }
+
                 if (ImGui.Button("Test Toast Icons"))
                 {
                     Plugin.TriggerToastIconPreview();
@@ -530,7 +541,7 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
                 ImGui.TextDisabled($"Import path: {importPath}");
             }
 
-            if (ImGui.CollapsingHeader("Analytics", ImGuiTreeNodeFlags.DefaultOpen))
+            if (ImGui.CollapsingHeader("Analytics"))
             {
                 var stats = QuestManager.GetStats();
 
@@ -548,24 +559,20 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
 
                 ImGui.Spacing();
                 ImGui.Text("Secret Titles");
-                if (ImGui.BeginTable("##SecretTitles", 4, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+                const int secretColumns = 3;
+                if (ImGui.BeginTable("##SecretTitleGrid", secretColumns, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
                 {
-                    ImGui.TableSetupColumn("Title");
-                    ImGui.TableSetupColumn("Progress");
-                    ImGui.TableSetupColumn("Requirement");
-                    ImGui.TableSetupColumn("Status");
-                    ImGui.TableHeadersRow();
-
-                    foreach (var entry in secretProgress)
+                    for (var i = 0; i < secretProgress.Count; i++)
                     {
-                        ImGui.TableNextRow();
+                        if (i % secretColumns == 0)
+                        {
+                            ImGui.TableNextRow();
+                        }
+
                         ImGui.TableNextColumn();
+                        var entry = secretProgress[i];
                         ImGui.TextUnformatted(entry.Title);
-                        ImGui.TableNextColumn();
-                        ImGui.TextUnformatted(entry.CurrentCount.ToString());
-                        ImGui.TableNextColumn();
-                        ImGui.TextUnformatted(entry.Requirement.ToString());
-                        ImGui.TableNextColumn();
+                        ImGui.TextDisabled($"{entry.CurrentCount}/{entry.Requirement}");
                         ImGui.TextUnformatted(entry.Unlocked ? "Unlocked" : "Locked");
                     }
 

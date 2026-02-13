@@ -338,6 +338,16 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    public void TestQuestCompleteSound()
+    {
+        PlayCustomSound("soft_bubble.wav");
+    }
+
+    public void TestLevelUpSound()
+    {
+        PlayCustomSound("cheery_tune.wav");
+    }
+
     private void MigrateTitleSyncDefaults()
     {
         var changed = false;
