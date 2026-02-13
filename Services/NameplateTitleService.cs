@@ -72,9 +72,10 @@ public sealed class NameplateTitleService : IDisposable
         var edge = 0xFF101010u;
         return preset switch
         {
-            "Pink" => (0xFFF08BBBu, edge),
-            "Cyan" => (0xFF78D6FFu, edge),
-            _ => (0xFFE5C383u, edge), // Gold
+            // NamePlate API expects ABGR ordering in the packed uint.
+            "Pink" => (0xFFBB8BF0u, edge),
+            "Cyan" => (0xFFFFD678u, edge),
+            _ => (0xFF83C3E5u, edge), // Gold
         };
     }
 

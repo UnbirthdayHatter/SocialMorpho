@@ -71,15 +71,19 @@ public sealed class Plugin : IDalamudPlugin
 
         QuestManager = new QuestManager(Configuration);
         
-        // Load quests from JSON file
-        try
+        if (Configuration.AutoLoadJsonQuests)
         {
-            QuestManager.LoadQuestsFromJson(PluginInterface.ConfigDirectory.FullName);
-            PluginLog.Info("Quests loaded from JSON successfully");
-        }
-        catch (Exception ex)
-        {
-            PluginLog.Error($"Error loading quests from JSON: {ex.Message}");
+            // Optional import path for advanced users. Disabled by default so the
+            // plugin starts with just the 3 daily quests.
+            try
+            {
+                QuestManager.LoadQuestsFromJson(PluginInterface.ConfigDirectory.FullName);
+                PluginLog.Info("Quests loaded from JSON successfully");
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error($"Error loading quests from JSON: {ex.Message}");
+            }
         }
 
         // Check and reset quests based on schedule
@@ -258,6 +262,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        Configuration.Save();
         WindowSystem.RemoveAllWindows();
 
         CommandManager.RemoveHandler(CommandName);
@@ -294,7 +299,7 @@ public sealed class Plugin : IDalamudPlugin
             {
                 ToastGui.ShowQuest($"SocialMorpho Icon Preview ({icon})", new Dalamud.Game.Gui.Toast.QuestToastOptions
                 {
-                    Position = Dalamud.Game.Gui.Toast.QuestToastPosition.Right,
+                    Position = Dalamud.Game.Gui.Toast.QuestToastPosition.Centre,
                     IconId = icon,
                     DisplayCheckmark = false,
                     PlaySound = false,
