@@ -47,6 +47,11 @@ public class QuestManager
         new DailySocialQuestTemplate("Bow Trio", "Have 3 different players use /bow to you", 3, new[] { "bows to you" }, new[] { "Solo", "RP" }),
         new DailySocialQuestTemplate("Respect Given", "Have 3 different players use /salute to you", 3, new[] { "salutes you" }, new[] { "Party", "RP" }),
         new DailySocialQuestTemplate("Good Vibes Only", "Have 3 different players use /thumbsup to you", 3, new[] { "gives you a thumbs up", "gives you the thumbs up" }, new[] { "Solo", "Party" }),
+        new DailySocialQuestTemplate("Ready Check Vibes", "Have 3 different players use /battlestance near you", 3, new[] { "assumes a battle stance" }, new[] { "Party" }),
+        new DailySocialQuestTemplate("Victory Circle", "Have 3 different players use /victory with you", 3, new[] { "strikes a victory pose" }, new[] { "Party" }),
+        new DailySocialQuestTemplate("Four Eyes Club", "Have 3 different players use /spectacles at you", 3, new[] { "adjusts their spectacles" }, new[] { "RP" }),
+        new DailySocialQuestTemplate("Encore Please", "Have 3 different players use /cheer for you", 3, new[] { "cheers you on", "cheers for you" }, new[] { "Party" }),
+        new DailySocialQuestTemplate("Polite Company", "Have 3 different players use /bow to you", 3, new[] { "bows to you" }, new[] { "RP" }),
     };
 
     public QuestManager(Configuration configuration)

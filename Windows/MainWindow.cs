@@ -48,6 +48,9 @@ public class MainWindow : Window, IDisposable
         }
         else
         {
+            DrawTopTitleProgress();
+            ImGui.Spacing();
+            ImGui.Separator();
             DrawQuestList();
             ImGui.Spacing();
             ImGui.Separator();
@@ -56,6 +59,20 @@ public class MainWindow : Window, IDisposable
                 DrawSettings();
             }
         }
+    }
+
+    private void DrawTopTitleProgress()
+    {
+        var progress = QuestManager.GetTitleProgress();
+
+        ImGui.TextUnformatted($"Title: {progress.CurrentTitle}");
+        ImGui.SameLine();
+        ImGui.TextDisabled($"Next: {progress.NextTitle}");
+
+        var needed = progress.NextRequirement;
+        var pct = needed <= 0 ? 1f : Math.Clamp((float)progress.CurrentCompletions / needed, 0f, 1f);
+        ImGui.ProgressBar(pct, new Vector2(-1f, 18f), $"{progress.CurrentCompletions}/{needed}");
+        ImGui.TextDisabled($"{progress.RemainingToNext} completion(s) to next title");
     }
 
     private void DrawQuestList()
