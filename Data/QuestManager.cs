@@ -32,6 +32,7 @@ public class QuestManager
         new SecretTitleTier("Battle Ready", "battlestance", 40),
         new SecretTitleTier("Victory Lap", "victory", 40),
         new SecretTitleTier("Four Eyes", "spectacles", 40),
+        new SecretTitleTier("Peer Reviewed", "commendation", 50),
     };
 
     private readonly Configuration Configuration;
@@ -52,6 +53,7 @@ public class QuestManager
         new DailySocialQuestTemplate("Four Eyes Club", "Have 3 different players use /spectacles at you", 3, new[] { "adjusts their spectacles" }, new[] { "RP" }),
         new DailySocialQuestTemplate("Encore Please", "Have 3 different players use /cheer for you", 3, new[] { "cheers you on", "cheers for you" }, new[] { "Party" }),
         new DailySocialQuestTemplate("Polite Company", "Have 3 different players use /bow to you", 3, new[] { "bows to you" }, new[] { "RP" }),
+        new DailySocialQuestTemplate("Fond Memories", "Receive 1 player commendation", 1, new[] { "commendation", "player commendation" }, new[] { "Solo", "Party", "RP" }),
     };
 
     public QuestManager(Configuration configuration)
@@ -803,6 +805,7 @@ public class QuestManager
         if (ContainsAny(chatLower, "battle stance", "battlestance", "assumes a battle stance")) return "battlestance";
         if (ContainsAny(chatLower, "victory pose", "victory")) return "victory";
         if (ContainsAny(chatLower, "spectacles", "adjusts their spectacles")) return "spectacles";
+        if (chatLower.Contains("commendation", StringComparison.OrdinalIgnoreCase)) return "commendation";
 
         return null;
     }

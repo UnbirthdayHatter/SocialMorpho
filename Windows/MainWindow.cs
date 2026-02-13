@@ -15,13 +15,6 @@ public class MainWindow : Window, IDisposable
     private Plugin Plugin;
     private QuestManager QuestManager;
     private QuestFilter currentFilter = QuestFilter.All;
-    private bool showAddQuestDialog = false;
-    private ulong newQuestId = 0;
-    private string newQuestTitle = string.Empty;
-    private string newQuestDescription = string.Empty;
-    private QuestType newQuestType = QuestType.Custom;
-    private int newQuestGoalCount = 1;
-    private ResetSchedule newQuestResetSchedule = ResetSchedule.None;
     private QuestData? selectedQuestForDetails = null;
     private string presetSelection = string.Empty;
     private string packStatusMessage = string.Empty;
@@ -38,11 +31,7 @@ public class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
-        if (showAddQuestDialog)
-        {
-            DrawAddQuestDialog();
-        }
-        else if (selectedQuestForDetails != null)
+        if (selectedQuestForDetails != null)
         {
             DrawQuestDetailsDialog();
         }
@@ -89,18 +78,6 @@ public class MainWindow : Window, IDisposable
         ImGui.SameLine();
         if (ImGui.Button("Completed"))
             currentFilter = QuestFilter.Completed;
-
-        ImGui.SameLine(ImGui.GetWindowWidth() - 110);
-        if (ImGui.Button("Add Quest"))
-        {
-            showAddQuestDialog = true;
-            newQuestId = (ulong)(QuestManager.GetAllQuests().Any() ? QuestManager.GetAllQuests().Max(q => q.Id) + 1 : 100);
-            newQuestTitle = string.Empty;
-            newQuestDescription = string.Empty;
-            newQuestType = QuestType.Custom;
-            newQuestGoalCount = 1;
-            newQuestResetSchedule = ResetSchedule.None;
-        }
 
         ImGui.Separator();
 
@@ -175,83 +152,6 @@ public class MainWindow : Window, IDisposable
 
         ImGui.Separator();
     }
-    private void DrawAddQuestDialog()
-    {
-        ImGui.Text("Add New Quest");
-        ImGui.Separator();
-
-        var questIdString = newQuestId.ToString();
-if (ImGui.InputText("Quest ID", ref questIdString, 20))
-{
-    if (ulong.TryParse(questIdString, out var parsed))
-        newQuestId = parsed;
-}
-ImGui.InputText("Title", ref newQuestTitle, 100);
-        ImGui.InputTextMultiline("Description", ref newQuestDescription, 500, new Vector2(-1, 60));
-        
-        if (ImGui.BeginCombo("Type", newQuestType.ToString()))
-        {
-            foreach (QuestType type in Enum.GetValues(typeof(QuestType)))
-            {
-                bool isSelected = newQuestType == type;
-                if (ImGui.Selectable(type.ToString(), isSelected))
-                {
-                    newQuestType = type;
-                }
-                if (isSelected)
-                {
-                    ImGui.SetItemDefaultFocus();
-                }
-            }
-            ImGui.EndCombo();
-        }
-
-        ImGui.InputInt("Goal Count", ref newQuestGoalCount);
-        if (newQuestGoalCount < 1) newQuestGoalCount = 1;
-
-        if (ImGui.BeginCombo("Reset Schedule", newQuestResetSchedule.ToString()))
-        {
-            foreach (ResetSchedule schedule in Enum.GetValues(typeof(ResetSchedule)))
-            {
-                bool isSelected = newQuestResetSchedule == schedule;
-                if (ImGui.Selectable(schedule.ToString(), isSelected))
-                {
-                    newQuestResetSchedule = schedule;
-                }
-                if (isSelected)
-                {
-                    ImGui.SetItemDefaultFocus();
-                }
-            }
-            ImGui.EndCombo();
-        }
-
-        ImGui.Spacing();
-
-        if (ImGui.Button("Create Quest"))
-        {
-            var newQuest = new QuestData
-            {
-                Id = newQuestId,
-                Title = newQuestTitle,
-                Description = newQuestDescription,
-                Type = newQuestType,
-                GoalCount = newQuestGoalCount,
-                ResetSchedule = newQuestResetSchedule,
-                CurrentCount = 0,
-                Completed = false
-            };
-            QuestManager.AddQuest(newQuest);
-            showAddQuestDialog = false;
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Cancel"))
-        {
-            showAddQuestDialog = false;
-        }
-    }
-
     private void DrawQuestDetailsDialog()
     {
         if (selectedQuestForDetails == null)
@@ -323,6 +223,7 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
             new RewardColorOption("Rose Glow", "Crowd Favorite"),
             new RewardColorOption("Mint Glow", "Thumbs of Approval"),
             new RewardColorOption("Violet Glow", "Victory Lap"),
+            new RewardColorOption("White Glow", "Peer Reviewed"),
         };
 
         var settingsHeight = MathF.Max(220f, ImGui.GetContentRegionAvail().Y);

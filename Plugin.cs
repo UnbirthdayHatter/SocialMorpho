@@ -75,6 +75,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
+        MigrateToThreeDailyQuestModel();
         MigrateTitleSyncDefaults();
         MigrateDoteQuestText();
         MigrateLegacyStarterQuests();
@@ -371,6 +372,22 @@ public sealed class Plugin : IDalamudPlugin
         {
             Configuration.Save();
         }
+    }
+
+    private void MigrateToThreeDailyQuestModel()
+    {
+        // One-time migration: reset legacy/custom quest state so all users move to
+        // the same 3-quest daily model.
+        if (Configuration.Version >= 3)
+        {
+            return;
+        }
+
+        Configuration.SavedQuests.Clear();
+        Configuration.CurrentDailyQuestIds.Clear();
+        Configuration.LastDailyQuestSelectionDate = null;
+        Configuration.Version = 3;
+        Configuration.Save();
     }
 
     public void TriggerToastIconPreview()

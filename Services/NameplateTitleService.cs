@@ -98,6 +98,7 @@ public sealed class NameplateTitleService : IDisposable
             "Rose Glow" => (0xFF9A9AF6u, 0xFF3A203Au),
             "Mint Glow" => (0xFFC8F2A0u, 0xFF1E3824u),
             "Violet Glow" => (0xFFE8A98Du, 0xFF2A2140u),
+            "White Glow" => (0xFFF2F2F2u, 0xFF2A2A2Au),
             _ => (0xFF83C3E5u, edge), // Gold
         };
     }
