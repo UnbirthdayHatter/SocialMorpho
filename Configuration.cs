@@ -9,6 +9,8 @@ namespace SocialMorpho;
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
+    public const string DefaultTitleSyncApiUrl = "https://socialmorpho-sync-api.socialmorpho.workers.dev";
+
     public int Version { get; set; } = 1;
 
     public bool SoundEnabled { get; set; } = true;
@@ -25,6 +27,11 @@ public class Configuration : IPluginConfiguration
     public SocialStats Stats { get; set; } = new();
     public bool ShowRewardTitleOnNameplate { get; set; } = false;
     public string RewardTitleColorPreset { get; set; } = "Gold";
+    public bool EnableTitleSync { get; set; } = true;
+    public bool ShareTitleSync { get; set; } = true;
+    public bool ShowSyncedTitles { get; set; } = true;
+    public string TitleSyncApiUrl { get; set; } = DefaultTitleSyncApiUrl;
+    public string TitleSyncApiKey { get; set; } = string.Empty;
 
     // Quest Tracker settings
     public bool ShowQuestTracker { get; set; } = true;

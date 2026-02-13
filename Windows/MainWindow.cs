@@ -5,6 +5,7 @@ using System;
 using System.Numerics;
 using System.Linq;
 using System.IO;
+using System.Collections.Generic;
 
 namespace SocialMorpho.Windows;
 
@@ -297,201 +298,315 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
         ImGui.Spacing();
 
         bool soundEnabled = Plugin.Configuration.SoundEnabled;
-        bool compactMode = Plugin.Configuration.CompactMode;
         float panelOpacity = Plugin.Configuration.PanelOpacity;
         bool showQuestTracker = Plugin.Configuration.ShowQuestTracker;
         bool showQuestTrackerOnLogin = Plugin.Configuration.ShowQuestTrackerOnLogin;
         bool showLoginNotification = Plugin.Configuration.ShowLoginNotification;
         bool showRewardTitleOnNameplate = Plugin.Configuration.ShowRewardTitleOnNameplate;
+        bool enableTitleSync = Plugin.Configuration.EnableTitleSync;
+        bool shareTitleSync = Plugin.Configuration.ShareTitleSync;
+        bool showSyncedTitles = Plugin.Configuration.ShowSyncedTitles;
         var rewardTitleColorPreset = Plugin.Configuration.RewardTitleColorPreset;
         var presetOptions = new[] { "Solo", "Party", "RP" };
-        var titleColorOptions = new[] { "Gold", "Pink", "Cyan" };
+        var titleProgress = QuestManager.GetTitleProgress();
+        var secretProgress = QuestManager.GetSecretTitleProgress();
+        var unlockedSecrets = new HashSet<string>(secretProgress.Where(s => s.Unlocked).Select(s => s.Title), StringComparer.Ordinal);
 
-        if (ImGui.Checkbox("Sound Enabled", ref soundEnabled))
+        var titleColorOptions = new[]
         {
-            Plugin.Configuration.SoundEnabled = soundEnabled;
-            Plugin.Configuration.Save();
-        }
+            new RewardColorOption("Gold", null),
+            new RewardColorOption("Pink", null),
+            new RewardColorOption("Cyan", null),
+            new RewardColorOption("Rose", null),
+            new RewardColorOption("Mint", null),
+            new RewardColorOption("Violet", null),
+            new RewardColorOption("Gold Glow", "Butterfly Kisses"),
+            new RewardColorOption("Pink Glow", "Boogie Master"),
+            new RewardColorOption("Cyan Glow", "Four Eyes"),
+            new RewardColorOption("Rose Glow", "Crowd Favorite"),
+            new RewardColorOption("Mint Glow", "Thumbs of Approval"),
+            new RewardColorOption("Violet Glow", "Victory Lap"),
+        };
 
-        if (ImGui.SliderFloat("Panel Opacity", ref panelOpacity, 0.0f, 1.0f))
+        var settingsHeight = MathF.Max(220f, ImGui.GetContentRegionAvail().Y);
+        if (ImGui.BeginChild("##SettingsScroll", new Vector2(0f, settingsHeight), true))
         {
-            Plugin.Configuration.PanelOpacity = panelOpacity;
-            Plugin.Configuration.Save();
-        }
-
-        if (ImGui.Checkbox("Compact Mode", ref compactMode))
-        {
-            Plugin.Configuration.CompactMode = compactMode;
-            Plugin.Configuration.Save();
-        }
-
-        if (ImGui.Checkbox("Show Quest Tracker Overlay", ref showQuestTracker))
-        {
-            Plugin.Configuration.ShowQuestTracker = showQuestTracker;
-            Plugin.Configuration.Save();
-            
-            // Update quest tracker window visibility
-            if (Plugin.QuestTrackerWindow != null)
+            if (ImGui.CollapsingHeader("Title Progress", ImGuiTreeNodeFlags.DefaultOpen))
             {
-                Plugin.QuestTrackerWindow.IsOpen = showQuestTracker;
+                ImGui.Text($"Current Title: {titleProgress.CurrentTitle}");
+                ImGui.Text($"Next Title: {titleProgress.NextTitle}");
+
+                var earned = titleProgress.CurrentCompletions;
+                var needed = titleProgress.NextRequirement;
+                var pct = needed <= 0 ? 1f : Math.Clamp((float)earned / needed, 0f, 1f);
+                ImGui.ProgressBar(pct, new Vector2(-1f, 22f), $"{earned}/{needed} completions");
+                ImGui.TextDisabled($"{titleProgress.RemainingToNext} completion(s) remaining");
             }
-        }
 
-        if (ImGui.Checkbox("Auto-show Tracker on Login", ref showQuestTrackerOnLogin))
-        {
-            Plugin.Configuration.ShowQuestTrackerOnLogin = showQuestTrackerOnLogin;
-            Plugin.Configuration.Save();
-        }
-
-        if (ImGui.Checkbox("Show Login Notification", ref showLoginNotification))
-        {
-            Plugin.Configuration.ShowLoginNotification = showLoginNotification;
-            Plugin.Configuration.Save();
-        }
-
-        if (ImGui.Checkbox("Show Reward Title Above Name", ref showRewardTitleOnNameplate))
-        {
-            Plugin.Configuration.ShowRewardTitleOnNameplate = showRewardTitleOnNameplate;
-            Plugin.Configuration.Save();
-            Plugin.RefreshNameplateTitlePreview();
-        }
-
-        if (ImGui.BeginCombo("Reward Title Color", rewardTitleColorPreset))
-        {
-            foreach (var option in titleColorOptions)
+            if (ImGui.CollapsingHeader("Tracker", ImGuiTreeNodeFlags.DefaultOpen))
             {
-                var selected = rewardTitleColorPreset == option;
-                if (ImGui.Selectable(option, selected))
+                if (ImGui.Checkbox("Show Quest Tracker Overlay", ref showQuestTracker))
                 {
-                    rewardTitleColorPreset = option;
-                    Plugin.Configuration.RewardTitleColorPreset = option;
+                    Plugin.Configuration.ShowQuestTracker = showQuestTracker;
+                    Plugin.Configuration.Save();
+                    if (Plugin.QuestTrackerWindow != null)
+                    {
+                        Plugin.QuestTrackerWindow.IsOpen = showQuestTracker;
+                    }
+                }
+
+                if (ImGui.Checkbox("Auto-show Tracker on Login", ref showQuestTrackerOnLogin))
+                {
+                    Plugin.Configuration.ShowQuestTrackerOnLogin = showQuestTrackerOnLogin;
+                    Plugin.Configuration.Save();
+                }
+
+                if (ImGui.Checkbox("Show Login Notification", ref showLoginNotification))
+                {
+                    Plugin.Configuration.ShowLoginNotification = showLoginNotification;
+                    Plugin.Configuration.Save();
+                }
+
+                if (ImGui.SliderFloat("Panel Opacity", ref panelOpacity, 0.0f, 1.0f))
+                {
+                    Plugin.Configuration.PanelOpacity = panelOpacity;
+                    Plugin.Configuration.Save();
+                }
+            }
+
+            if (ImGui.CollapsingHeader("Audio", ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                if (ImGui.Checkbox("Sound Enabled", ref soundEnabled))
+                {
+                    Plugin.Configuration.SoundEnabled = soundEnabled;
+                    Plugin.Configuration.Save();
+                }
+            }
+
+            if (ImGui.CollapsingHeader("Reward Title"))
+            {
+                if (ImGui.Checkbox("Show Reward Title Above Name", ref showRewardTitleOnNameplate))
+                {
+                    Plugin.Configuration.ShowRewardTitleOnNameplate = showRewardTitleOnNameplate;
                     Plugin.Configuration.Save();
                     Plugin.RefreshNameplateTitlePreview();
                 }
 
-                if (selected)
+                if (ImGui.BeginCombo("Reward Title Color", rewardTitleColorPreset))
                 {
-                    ImGui.SetItemDefaultFocus();
+                    foreach (var option in titleColorOptions)
+                    {
+                        var unlocked = string.IsNullOrWhiteSpace(option.UnlockSecretTitle) || unlockedSecrets.Contains(option.UnlockSecretTitle);
+                        var label = unlocked
+                            ? option.Name
+                            : $"{option.Name} (unlock: {option.UnlockSecretTitle})";
+
+                        if (!unlocked)
+                        {
+                            ImGui.BeginDisabled();
+                        }
+
+                        var selected = rewardTitleColorPreset == option.Name;
+                        if (ImGui.Selectable(label, selected) && unlocked)
+                        {
+                            rewardTitleColorPreset = option.Name;
+                            Plugin.Configuration.RewardTitleColorPreset = option.Name;
+                            Plugin.Configuration.Save();
+                            Plugin.RefreshNameplateTitlePreview();
+                        }
+
+                        if (!unlocked)
+                        {
+                            ImGui.EndDisabled();
+                        }
+                    }
+
+                    ImGui.EndCombo();
                 }
             }
 
-            ImGui.EndCombo();
-        }
-
-        ImGui.Spacing();
-        ImGui.Text("Daily Quest Preset");
-        if (ImGui.BeginCombo("##preset", presetSelection))
-        {
-            foreach (var option in presetOptions)
+            if (ImGui.CollapsingHeader("Title Sync (Phase 1)"))
             {
-                var selected = presetSelection == option;
-                if (ImGui.Selectable(option, selected))
+                if (ImGui.Checkbox("Enable Title Sync", ref enableTitleSync))
                 {
-                    presetSelection = option;
-                    Plugin.Configuration.ActiveQuestPreset = option;
+                    Plugin.Configuration.EnableTitleSync = enableTitleSync;
                     Plugin.Configuration.Save();
                 }
 
-                if (selected)
+                if (ImGui.Checkbox("Share My Title", ref shareTitleSync))
                 {
-                    ImGui.SetItemDefaultFocus();
+                    Plugin.Configuration.ShareTitleSync = shareTitleSync;
+                    Plugin.Configuration.Save();
+                    Plugin.RequestTitleSyncNow();
+                }
+
+                if (ImGui.Checkbox("Show Synced Titles", ref showSyncedTitles))
+                {
+                    Plugin.Configuration.ShowSyncedTitles = showSyncedTitles;
+                    Plugin.Configuration.Save();
+                    Plugin.RefreshNameplateTitlePreview();
+                }
+
+                if (ImGui.Button("Push Title Now"))
+                {
+                    Plugin.RequestTitleSyncNow();
+                }
+
+                ImGui.TextDisabled($"Sync service: {Plugin.Configuration.TitleSyncApiUrl}");
+                ImGui.TextDisabled("No API key setup required for users.");
+            }
+
+            if (ImGui.CollapsingHeader("Daily Quests"))
+            {
+                ImGui.TextWrapped("Preset filters the random pool: Solo is general social quests, Party adds group/combat-flavored emote quests, and RP prioritizes roleplay-themed social quests.");
+                if (ImGui.BeginCombo("Preset", presetSelection))
+                {
+                    foreach (var option in presetOptions)
+                    {
+                        var selected = presetSelection == option;
+                        if (ImGui.Selectable(option, selected))
+                        {
+                            presetSelection = option;
+                            Plugin.Configuration.ActiveQuestPreset = option;
+                            Plugin.Configuration.Save();
+                        }
+                    }
+
+                    ImGui.EndCombo();
+                }
+
+                if (ImGui.Button("Re-roll Daily Quests Now"))
+                {
+                    QuestManager.ForceRerollDailyQuests(DateTime.Now);
+                    packStatusMessage = "Daily quests re-rolled for current preset.";
                 }
             }
 
-            ImGui.EndCombo();
-        }
-
-        if (ImGui.Button("Re-roll Daily Quests Now"))
-        {
-            QuestManager.ForceRerollDailyQuests(DateTime.Now);
-            packStatusMessage = "Daily quests re-rolled for current preset.";
-        }
-
-        ImGui.Spacing();
-
-        if (ImGui.Button("Reload Quests from JSON"))
-        {
-            QuestManager.LoadQuestsFromJson(Plugin.PluginInterface.ConfigDirectory.FullName);
-            packStatusMessage = "Reloaded quests from Quests.json.";
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Reset All Quest Progress"))
-        {
-            QuestManager.ResetAllQuestProgress();
-        }
-
-        if (ImGui.Button("Test Quest Popup"))
-        {
-            Plugin.TriggerQuestOfferTest();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Test Toast Icons"))
-        {
-            Plugin.TriggerToastIconPreview();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Export Quest Pack"))
-        {
-            var result = QuestManager.ExportQuestPack(Plugin.PluginInterface.ConfigDirectory.FullName);
-            packStatusMessage = result.message;
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Import Quest Pack"))
-        {
-            var result = QuestManager.ImportQuestPack(Plugin.PluginInterface.ConfigDirectory.FullName);
-            packStatusMessage = result.message;
-        }
-
-        if (!string.IsNullOrWhiteSpace(packStatusMessage))
-        {
-            ImGui.TextWrapped(packStatusMessage);
-        }
-
-        var importPath = Path.Combine(Plugin.PluginInterface.ConfigDirectory.FullName, "QuestPack.import.json");
-        ImGui.TextDisabled($"Import path: {importPath}");
-
-        if (ImGui.CollapsingHeader("Analytics"))
-        {
-            var stats = QuestManager.GetStats();
-            var titleProgress = QuestManager.GetTitleProgress();
-            var secretProgress = QuestManager.GetSecretTitleProgress();
-
-            ImGui.Text($"Unlocked Title: {stats.UnlockedTitle}");
-            ImGui.Text($"Current Title Tier: {titleProgress.CurrentTitle}");
-            ImGui.Text($"Next Title Tier: {titleProgress.NextTitle}");
-            ImGui.Text($"XP To Next Title: {titleProgress.RemainingToNext} completion(s)");
-            ImGui.Text($"Weekly Rank: {stats.WeeklyRank}");
-            ImGui.Text($"Total Progress Ticks: {stats.TotalProgressTicks}");
-            ImGui.Text($"Total Completions: {stats.TotalCompletions}");
-            ImGui.Text($"Current Streak: {stats.CurrentStreakDays} day(s)");
-            ImGui.Text($"Best Streak: {stats.BestStreakDays} day(s)");
-            ImGui.Text($"Weekly Completions: {stats.WeeklyCompletions}");
-
-            if (secretProgress.Count > 0)
+            if (ImGui.CollapsingHeader("Tools"))
             {
-                ImGui.Separator();
+                if (ImGui.Button("Reload Quests from JSON"))
+                {
+                    QuestManager.LoadQuestsFromJson(Plugin.PluginInterface.ConfigDirectory.FullName);
+                    packStatusMessage = "Reloaded quests from Quests.json.";
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("Reset All Quest Progress"))
+                {
+                    QuestManager.ResetAllQuestProgress();
+                }
+
+                if (ImGui.Button("Test Quest Popup"))
+                {
+                    Plugin.TriggerQuestOfferTest();
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("Test Toast Icons"))
+                {
+                    Plugin.TriggerToastIconPreview();
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("Export Quest Pack"))
+                {
+                    var result = QuestManager.ExportQuestPack(Plugin.PluginInterface.ConfigDirectory.FullName);
+                    packStatusMessage = result.message;
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("Import Quest Pack"))
+                {
+                    var result = QuestManager.ImportQuestPack(Plugin.PluginInterface.ConfigDirectory.FullName);
+                    packStatusMessage = result.message;
+                }
+
+                if (!string.IsNullOrWhiteSpace(packStatusMessage))
+                {
+                    ImGui.TextWrapped(packStatusMessage);
+                }
+
+                var importPath = Path.Combine(Plugin.PluginInterface.ConfigDirectory.FullName, "QuestPack.import.json");
+                ImGui.TextDisabled($"Import path: {importPath}");
+            }
+
+            if (ImGui.CollapsingHeader("Analytics", ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                var stats = QuestManager.GetStats();
+
+                if (ImGui.BeginTable("##AnalyticsSummary", 2, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+                {
+                    DrawStatRow("Unlocked Title", stats.UnlockedTitle);
+                    DrawStatRow("Weekly Rank", stats.WeeklyRank);
+                    DrawStatRow("Total Completions", stats.TotalCompletions.ToString());
+                    DrawStatRow("Total Progress Ticks", stats.TotalProgressTicks.ToString());
+                    DrawStatRow("Current Streak", $"{stats.CurrentStreakDays} day(s)");
+                    DrawStatRow("Best Streak", $"{stats.BestStreakDays} day(s)");
+                    DrawStatRow("Weekly Completions", stats.WeeklyCompletions.ToString());
+                    ImGui.EndTable();
+                }
+
+                ImGui.Spacing();
                 ImGui.Text("Secret Titles");
-                foreach (var entry in secretProgress)
+                if (ImGui.BeginTable("##SecretTitles", 4, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
                 {
-                    var status = entry.Unlocked ? "Unlocked" : "Locked";
-                    ImGui.Text($"{entry.Title}: {entry.CurrentCount}/{entry.Requirement} ({status})");
+                    ImGui.TableSetupColumn("Title");
+                    ImGui.TableSetupColumn("Progress");
+                    ImGui.TableSetupColumn("Requirement");
+                    ImGui.TableSetupColumn("Status");
+                    ImGui.TableHeadersRow();
+
+                    foreach (var entry in secretProgress)
+                    {
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(entry.Title);
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(entry.CurrentCount.ToString());
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(entry.Requirement.ToString());
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(entry.Unlocked ? "Unlocked" : "Locked");
+                    }
+
+                    ImGui.EndTable();
+                }
+
+                if (stats.RecentDailyCompletions.Count > 0)
+                {
+                    ImGui.Spacing();
+                    ImGui.Text("Last 14 Days");
+                    if (ImGui.BeginTable("##RecentDays", 2, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+                    {
+                        ImGui.TableSetupColumn("Date");
+                        ImGui.TableSetupColumn("Completions");
+                        ImGui.TableHeadersRow();
+
+                        foreach (var day in stats.RecentDailyCompletions)
+                        {
+                            ImGui.TableNextRow();
+                            ImGui.TableNextColumn();
+                            ImGui.TextUnformatted(day.Date);
+                            ImGui.TableNextColumn();
+                            ImGui.TextUnformatted(day.Count.ToString());
+                        }
+
+                        ImGui.EndTable();
+                    }
                 }
             }
 
-            if (stats.RecentDailyCompletions.Count > 0)
-            {
-                ImGui.Separator();
-                ImGui.Text("Last 14 days:");
-                foreach (var day in stats.RecentDailyCompletions)
-                {
-                    ImGui.Text($"{day.Date}: {day.Count}");
-                }
-            }
+            ImGui.EndChild();
         }
+    }
+
+    private static void DrawStatRow(string label, string value)
+    {
+        ImGui.TableNextRow();
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(label);
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(value);
     }
 
     private Vector4 GetQuestTypeColor(QuestType type)
@@ -526,4 +641,16 @@ public enum QuestFilter
     All,
     Active,
     Completed
+}
+
+public readonly struct RewardColorOption
+{
+    public RewardColorOption(string name, string? unlockSecretTitle)
+    {
+        Name = name;
+        UnlockSecretTitle = unlockSecretTitle;
+    }
+
+    public string Name { get; }
+    public string? UnlockSecretTitle { get; }
 }

@@ -1,0 +1,12 @@
+name = "socialmorpho-sync-api"
+main = "src/worker.js"
+compatibility_date = "2026-02-13"
+
+[vars]
+# Optional. If set, clients must send this exact version in `x-client-version`.
+REQUIRED_CLIENT_VERSION = ""
+
+[[kv_namespaces]]
+binding = "TITLE_KV"
+id = "04d2786ce0ac477d9fce164581204176"
+preview_id = "4569148616184a39b7b3935e87494aec"

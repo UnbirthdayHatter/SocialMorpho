@@ -47,6 +47,7 @@ public sealed class Plugin : IDalamudPlugin
     public QuestManager QuestManager { get; init; }
     private QuestNotificationService QuestNotificationService { get; init; }
     private QuestOfferService QuestOfferService { get; init; }
+    private TitleSyncService TitleSyncService { get; init; }
     private NameplateTitleService NameplateTitleService { get; init; }
 
     public Plugin(
@@ -74,6 +75,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
+        MigrateTitleSyncDefaults();
         MigrateDoteQuestText();
         MigrateLegacyStarterQuests();
 
@@ -104,7 +106,8 @@ public sealed class Plugin : IDalamudPlugin
         QuestTrackerWindow = new QuestTrackerWindow(this, QuestManager);
         QuestOfferWindow = new QuestOfferWindow(this);
         QuestOfferService = new QuestOfferService(this, ClientState, ToastGui, PluginLog, QuestOfferWindow);
-        NameplateTitleService = new NameplateTitleService(this, NamePlateGui, ObjectTable);
+        TitleSyncService = new TitleSyncService(this, ClientState, ObjectTable, PluginLog);
+        NameplateTitleService = new NameplateTitleService(this, NamePlateGui, ObjectTable, TitleSyncService);
 
         WindowSystem.AddWindow(MainWindow);
         WindowSystem.AddWindow(QuestTrackerWindow);
@@ -137,6 +140,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void DrawUI()
     {
+        TitleSyncService.Tick();
         WindowSystem.Draw();
     }
 
@@ -177,6 +181,7 @@ public sealed class Plugin : IDalamudPlugin
             if (leveledUp)
             {
                 PlayCustomSound("cheery_tune.wav");
+                TitleSyncService.RequestPushSoon();
             }
         }
         catch (Exception ex)
@@ -317,6 +322,7 @@ public sealed class Plugin : IDalamudPlugin
 
         QuestNotificationService?.Dispose();
         QuestOfferService?.Dispose();
+        TitleSyncService?.Dispose();
         NameplateTitleService?.Dispose();
         QuestOfferWindow?.Dispose();
         QuestTrackerWindow?.Dispose();
@@ -329,6 +335,31 @@ public sealed class Plugin : IDalamudPlugin
         if (!QuestOfferService.TriggerTestOfferPopup())
         {
             PluginLog.Warning("No quest offer available for manual popup test.");
+        }
+    }
+
+    private void MigrateTitleSyncDefaults()
+    {
+        var changed = false;
+
+        if (string.IsNullOrWhiteSpace(Configuration.TitleSyncApiUrl))
+        {
+            Configuration.TitleSyncApiUrl = Configuration.DefaultTitleSyncApiUrl;
+            changed = true;
+        }
+
+        if (Configuration.Version < 2)
+        {
+            Configuration.EnableTitleSync = true;
+            Configuration.ShareTitleSync = true;
+            Configuration.ShowSyncedTitles = true;
+            Configuration.Version = 2;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            Configuration.Save();
         }
     }
 
@@ -357,6 +388,12 @@ public sealed class Plugin : IDalamudPlugin
     public void RefreshNameplateTitlePreview()
     {
         NameplateTitleService.RequestRedraw();
+        TitleSyncService.RequestPushSoon();
+    }
+
+    public void RequestTitleSyncNow()
+    {
+        TitleSyncService.RequestPushSoon();
     }
 
     public bool ShouldHideQuestOverlay()

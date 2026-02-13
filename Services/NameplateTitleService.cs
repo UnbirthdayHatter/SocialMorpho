@@ -8,12 +8,14 @@ public sealed class NameplateTitleService : IDisposable
     private readonly Plugin plugin;
     private readonly INamePlateGui namePlateGui;
     private readonly IObjectTable objectTable;
+    private readonly TitleSyncService titleSyncService;
 
-    public NameplateTitleService(Plugin plugin, INamePlateGui namePlateGui, IObjectTable objectTable)
+    public NameplateTitleService(Plugin plugin, INamePlateGui namePlateGui, IObjectTable objectTable, TitleSyncService titleSyncService)
     {
         this.plugin = plugin;
         this.namePlateGui = namePlateGui;
         this.objectTable = objectTable;
+        this.titleSyncService = titleSyncService;
         this.namePlateGui.OnNamePlateUpdate += OnNamePlateUpdate;
     }
 
@@ -30,21 +32,32 @@ public sealed class NameplateTitleService : IDisposable
             return;
         }
 
-        var title = this.plugin.Configuration.Stats.UnlockedTitle;
-        if (string.IsNullOrWhiteSpace(title))
-        {
-            return;
-        }
-
-        var prefixedTitle = $"[{title}]";
-        var (textColor, edgeColor) = GetColors(this.plugin.Configuration.RewardTitleColorPreset);
-
         foreach (var handler in handlers)
         {
-            if (handler.GameObjectId != localId)
+            var title = string.Empty;
+            var colorPreset = "Gold";
+
+            if (handler.GameObjectId == localId)
+            {
+                title = this.plugin.Configuration.Stats.UnlockedTitle;
+                colorPreset = this.plugin.Configuration.RewardTitleColorPreset;
+            }
+            else if (this.plugin.Configuration.EnableTitleSync &&
+                     this.plugin.Configuration.ShowSyncedTitles &&
+                     this.titleSyncService.TryGetSyncedForGameObjectId(handler.GameObjectId, out var remote) &&
+                     !string.IsNullOrWhiteSpace(remote.title))
+            {
+                title = remote.title;
+                colorPreset = string.IsNullOrWhiteSpace(remote.colorPreset) ? "Gold" : remote.colorPreset;
+            }
+
+            if (string.IsNullOrWhiteSpace(title))
             {
                 continue;
             }
+
+            var prefixedTitle = $"[{title}]";
+            var (textColor, edgeColor) = GetColors(colorPreset);
 
             try
             {
@@ -75,6 +88,15 @@ public sealed class NameplateTitleService : IDisposable
             // NamePlate API expects ABGR ordering in the packed uint.
             "Pink" => (0xFFBB8BF0u, edge),
             "Cyan" => (0xFFFFD678u, edge),
+            "Rose" => (0xFF9A9AF6u, edge),
+            "Mint" => (0xFFC8F2A0u, edge),
+            "Violet" => (0xFFE8A98Du, edge),
+            "Gold Glow" => (0xFF83C3E5u, 0xFF3C2F15u),
+            "Pink Glow" => (0xFFBB8BF0u, 0xFF3A1C39u),
+            "Cyan Glow" => (0xFFFFD678u, 0xFF1A3A3Au),
+            "Rose Glow" => (0xFF9A9AF6u, 0xFF3A203Au),
+            "Mint Glow" => (0xFFC8F2A0u, 0xFF1E3824u),
+            "Violet Glow" => (0xFFE8A98Du, 0xFF2A2140u),
             _ => (0xFF83C3E5u, edge), // Gold
         };
     }
