@@ -164,6 +164,8 @@ public sealed class TitleSyncService : IDisposable
             using var res = await HttpClient.SendAsync(req).ConfigureAwait(false);
             if (!res.IsSuccessStatusCode)
             {
+                var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+                this.log.Warning($"Title sync push failed HTTP {(int)res.StatusCode}: {body}");
                 return;
             }
 
@@ -207,6 +209,8 @@ public sealed class TitleSyncService : IDisposable
             using var res = await HttpClient.SendAsync(req).ConfigureAwait(false);
             if (!res.IsSuccessStatusCode)
             {
+                var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+                this.log.Warning($"Title sync pull failed HTTP {(int)res.StatusCode}: {body}");
                 return;
             }
 
@@ -276,7 +280,7 @@ public sealed class TitleSyncService : IDisposable
     {
         foreach (var obj in this.objectTable)
         {
-            if (obj == null || obj.GameObjectId != gameObjectId)
+            if (obj == null || !IsObjectMatch(obj, gameObjectId))
             {
                 continue;
             }
@@ -298,7 +302,7 @@ public sealed class TitleSyncService : IDisposable
     {
         foreach (var obj in this.objectTable)
         {
-            if (obj == null || obj.GameObjectId != gameObjectId)
+            if (obj == null || !IsObjectMatch(obj, gameObjectId))
             {
                 continue;
             }
@@ -313,6 +317,29 @@ public sealed class TitleSyncService : IDisposable
         }
 
         return null;
+    }
+
+    public bool TryGetCharacterNameForGameObjectId(ulong gameObjectId, out string characterName)
+    {
+        characterName = string.Empty;
+        foreach (var obj in this.objectTable)
+        {
+            if (obj == null || !IsObjectMatch(obj, gameObjectId))
+            {
+                continue;
+            }
+
+            var name = TryGetName(obj);
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return false;
+            }
+
+            characterName = name;
+            return true;
+        }
+
+        return false;
     }
 
     private bool TryGetLocalCharacter(out string character, out string world)
@@ -411,6 +438,41 @@ public sealed class TitleSyncService : IDisposable
         }
 
         return null;
+    }
+
+    private static bool IsObjectMatch(dynamic obj, ulong nameplateGameObjectId)
+    {
+        try
+        {
+            if ((ulong)obj.GameObjectId == nameplateGameObjectId)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            // Some contexts pass 32-bit entity ids in nameplate handlers.
+            var entityId = (uint)obj.EntityId;
+            if ((ulong)entityId == nameplateGameObjectId)
+            {
+                return true;
+            }
+
+            if (((ulong)obj.GameObjectId & 0xFFFFFFFFUL) == (ulong)entityId &&
+                nameplateGameObjectId == (ulong)entityId)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
     }
 
     private string GetClientVersion()

@@ -60,6 +60,14 @@ public sealed class NameplateTitleService : IDisposable
                 title = byName.title;
                 colorPreset = string.IsNullOrWhiteSpace(byName.colorPreset) ? "Gold" : byName.colorPreset;
             }
+            else if (syncEnabled &&
+                     this.titleSyncService.TryGetCharacterNameForGameObjectId(handler.GameObjectId, out var objectTableName) &&
+                     this.titleSyncService.TryGetSyncedForCharacter(objectTableName, out var byObjectName) &&
+                     !string.IsNullOrWhiteSpace(byObjectName.title))
+            {
+                title = byObjectName.title;
+                colorPreset = string.IsNullOrWhiteSpace(byObjectName.colorPreset) ? "Gold" : byObjectName.colorPreset;
+            }
 
             if (string.IsNullOrWhiteSpace(title))
             {
