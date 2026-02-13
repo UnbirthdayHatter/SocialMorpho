@@ -10,6 +10,30 @@ namespace SocialMorpho.Data;
 public class QuestManager
 {
     private const ulong DailyQuestIdBase = 900000;
+    private static readonly List<TitleTier> BaseTitleTiers = new()
+    {
+        new TitleTier("New Adventurer", 0),
+        new TitleTier("Budding Friend", 10),
+        new TitleTier("Social Star", 30),
+        new TitleTier("Heart of Eorzea", 75),
+    };
+
+    private static readonly List<SecretTitleTier> SecretTitleTiers = new()
+    {
+        new SecretTitleTier("Butterfly Kisses", "dote", 100),
+        new SecretTitleTier("Boogie Master", "dance", 50),
+        new SecretTitleTier("Hug Magnet", "hug", 75),
+        new SecretTitleTier("Kiss Collector", "blowkiss", 60),
+        new SecretTitleTier("Wave Whisperer", "wave", 75),
+        new SecretTitleTier("Sky Saluter", "salute", 50),
+        new SecretTitleTier("Courtly Bow", "bow", 60),
+        new SecretTitleTier("Crowd Favorite", "cheer", 60),
+        new SecretTitleTier("Thumbs of Approval", "thumbsup", 60),
+        new SecretTitleTier("Battle Ready", "battlestance", 40),
+        new SecretTitleTier("Victory Lap", "victory", 40),
+        new SecretTitleTier("Four Eyes", "spectacles", 40),
+    };
+
     private readonly Configuration Configuration;
     private readonly Dictionary<ulong, QuestProgress> QuestProgress = new();
     private static readonly List<DailySocialQuestTemplate> DailySocialQuestTemplates = new()
@@ -28,6 +52,7 @@ public class QuestManager
     public QuestManager(Configuration configuration)
     {
         Configuration = configuration;
+        EnsureStatsInitialized();
         LoadProgressFromConfig();
         EnsureStatsBuckets(DateTime.Now);
     }
@@ -243,6 +268,7 @@ public class QuestManager
 
         var now = DateTime.Now;
         EnsureStatsBuckets(now);
+        var trackedEmote = TrackEmoteFromChat(normalizedLower: chatText.ToLowerInvariant());
 
         var normalized = chatText.Trim();
         var normalizedLower = normalized.ToLowerInvariant();
@@ -252,6 +278,10 @@ public class QuestManager
 
         if (quest == null)
         {
+            if (trackedEmote)
+            {
+                Configuration.Save();
+            }
             return null;
         }
 
@@ -272,6 +302,8 @@ public class QuestManager
             RegisterCompletion(now);
             completedNow = true;
         }
+
+        Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats);
 
         Configuration.Save();
         return new ProgressUpdateResult
@@ -499,6 +531,62 @@ public class QuestManager
         return Configuration.Stats;
     }
 
+    public TitleProgressInfo GetTitleProgress()
+    {
+        var stats = GetStats();
+        var currentCompletions = stats.TotalCompletions;
+        var currentTier = BaseTitleTiers
+            .Where(t => currentCompletions >= t.RequiredCompletions)
+            .OrderByDescending(t => t.RequiredCompletions)
+            .FirstOrDefault() ?? BaseTitleTiers[0];
+
+        var nextTier = BaseTitleTiers
+            .Where(t => t.RequiredCompletions > currentCompletions)
+            .OrderBy(t => t.RequiredCompletions)
+            .FirstOrDefault();
+
+        if (nextTier == null)
+        {
+            return new TitleProgressInfo
+            {
+                CurrentTitle = currentTier.Title,
+                NextTitle = "Max rank reached",
+                CurrentCompletions = currentCompletions,
+                NextRequirement = currentTier.RequiredCompletions,
+                RemainingToNext = 0,
+            };
+        }
+
+        return new TitleProgressInfo
+        {
+            CurrentTitle = currentTier.Title,
+            NextTitle = nextTier.Title,
+            CurrentCompletions = currentCompletions,
+            NextRequirement = nextTier.RequiredCompletions,
+            RemainingToNext = Math.Max(0, nextTier.RequiredCompletions - currentCompletions),
+        };
+    }
+
+    public List<SecretTitleProgressInfo> GetSecretTitleProgress()
+    {
+        var stats = GetStats();
+        var result = new List<SecretTitleProgressInfo>(SecretTitleTiers.Count);
+        foreach (var tier in SecretTitleTiers)
+        {
+            var count = GetEmoteCount(stats, tier.EmoteKey);
+            result.Add(new SecretTitleProgressInfo
+            {
+                Title = tier.Title,
+                EmoteKey = tier.EmoteKey,
+                CurrentCount = count,
+                Requirement = tier.RequiredCount,
+                Unlocked = count >= tier.RequiredCount,
+            });
+        }
+
+        return result;
+    }
+
     private void RegisterCompletion(DateTime now)
     {
         EnsureStatsBuckets(now);
@@ -507,7 +595,7 @@ public class QuestManager
         stats.TotalCompletions++;
         stats.WeeklyCompletions++;
         stats.WeeklyRank = GetWeeklyRank(stats.WeeklyCompletions);
-        stats.UnlockedTitle = GetUnlockedTitle(stats.TotalCompletions);
+        stats.UnlockedTitle = GetUnlockedTitle(stats);
 
         if (stats.LastCompletionDate.HasValue)
         {
@@ -576,12 +664,90 @@ public class QuestManager
         return "Sproutling";
     }
 
-    private static string GetUnlockedTitle(int totalCompletions)
+    private void EnsureStatsInitialized()
     {
+        var stats = Configuration.Stats;
+        stats.EmoteReceivedCounts ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var secret in SecretTitleTiers)
+        {
+            if (!stats.EmoteReceivedCounts.ContainsKey(secret.EmoteKey))
+            {
+                stats.EmoteReceivedCounts[secret.EmoteKey] = 0;
+            }
+        }
+    }
+
+    private bool TrackEmoteFromChat(string normalizedLower)
+    {
+        var emote = DetectReceivedEmote(normalizedLower);
+        if (string.IsNullOrWhiteSpace(emote))
+        {
+            return false;
+        }
+
+        EnsureStatsInitialized();
+        var counts = Configuration.Stats.EmoteReceivedCounts;
+        counts.TryGetValue(emote, out var current);
+        counts[emote] = current + 1;
+        Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats);
+        return true;
+    }
+
+    private static string? DetectReceivedEmote(string chatLower)
+    {
+        if (string.IsNullOrWhiteSpace(chatLower))
+        {
+            return null;
+        }
+
+        var hasYou = chatLower.Contains(" you", StringComparison.Ordinal) ||
+                     chatLower.EndsWith("you", StringComparison.Ordinal);
+        if (!hasYou)
+        {
+            return null;
+        }
+
+        if (ContainsAny(chatLower, "dote", "dotes")) return "dote";
+        if (ContainsAny(chatLower, "blowkiss", "blow kiss", "blows you a kiss", "blow kisses")) return "blowkiss";
+        if (ContainsAny(chatLower, "dance", "dances")) return "dance";
+        if (ContainsAny(chatLower, "thumbsup", "thumbs up", "the thumbs up", "a thumbs up")) return "thumbsup";
+        if (ContainsAny(chatLower, "salute", "salutes")) return "salute";
+        if (ContainsAny(chatLower, "cheer", "cheers")) return "cheer";
+        if (ContainsAny(chatLower, "wave", "waves")) return "wave";
+        if (ContainsAny(chatLower, "hug", "hugs")) return "hug";
+        if (ContainsAny(chatLower, "bow", "bows")) return "bow";
+        if (ContainsAny(chatLower, "battle stance", "battlestance", "assumes a battle stance")) return "battlestance";
+        if (ContainsAny(chatLower, "victory pose", "victory")) return "victory";
+        if (ContainsAny(chatLower, "spectacles", "adjusts their spectacles")) return "spectacles";
+
+        return null;
+    }
+
+    private static string GetUnlockedTitle(SocialStats stats)
+    {
+        foreach (var secret in SecretTitleTiers)
+        {
+            if (GetEmoteCount(stats, secret.EmoteKey) >= secret.RequiredCount)
+            {
+                return secret.Title;
+            }
+        }
+
+        var totalCompletions = stats.TotalCompletions;
         if (totalCompletions >= 75) return "Heart of Eorzea";
         if (totalCompletions >= 30) return "Social Star";
         if (totalCompletions >= 10) return "Budding Friend";
         return "New Adventurer";
+    }
+
+    private static int GetEmoteCount(SocialStats stats, string emoteKey)
+    {
+        if (stats.EmoteReceivedCounts == null)
+        {
+            return 0;
+        }
+
+        return stats.EmoteReceivedCounts.TryGetValue(emoteKey, out var count) ? count : 0;
     }
 
     private void RefreshDailyQuestTitles()
@@ -625,6 +791,32 @@ public class QuestManager
         Configuration.SavedQuests.RemoveAll(q => Configuration.CurrentDailyQuestIds.Contains(q.Id));
         Configuration.CurrentDailyQuestIds.Clear();
     }
+}
+
+public sealed class TitleTier
+{
+    public TitleTier(string title, int requiredCompletions)
+    {
+        Title = title;
+        RequiredCompletions = requiredCompletions;
+    }
+
+    public string Title { get; }
+    public int RequiredCompletions { get; }
+}
+
+public sealed class SecretTitleTier
+{
+    public SecretTitleTier(string title, string emoteKey, int requiredCount)
+    {
+        Title = title;
+        EmoteKey = emoteKey;
+        RequiredCount = requiredCount;
+    }
+
+    public string Title { get; }
+    public string EmoteKey { get; }
+    public int RequiredCount { get; }
 }
 
 public class QuestProgress

@@ -10,11 +10,19 @@ using Dalamud.Plugin.Services;
 using SocialMorpho.Data;
 using SocialMorpho.Windows;
 using SocialMorpho.Services;
+using System.IO;
+using System.Runtime.InteropServices;
 
 namespace SocialMorpho;
 
 public sealed class Plugin : IDalamudPlugin
 {
+    private const uint SndAsync = 0x0001;
+    private const uint SndFilename = 0x00020000;
+
+    [DllImport("winmm.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool PlaySound(string pszSound, nint hmod, uint fdwSound);
+
     public string Name => "Social Morpho";
     private const string CommandName = "/morpho";
     private const string CommandNameAlt = "/sm";
@@ -152,21 +160,23 @@ public sealed class Plugin : IDalamudPlugin
                 return;
             }
 
-            if (text.Contains("dotes on you", StringComparison.OrdinalIgnoreCase) ||
-                text.Contains("dotes you", StringComparison.OrdinalIgnoreCase))
-            {
-                var doteResult = QuestManager.IncrementQuestProgressFromChatDetailed(text);
-                if (doteResult != null)
-                {
-                    ShowProgressToast(doteResult);
-                }
-                return;
-            }
-
+            var previousTitle = QuestManager.GetStats().UnlockedTitle;
             var result = QuestManager.IncrementQuestProgressFromChatDetailed(text);
+            var newTitle = QuestManager.GetStats().UnlockedTitle;
+            var leveledUp = !string.Equals(previousTitle, newTitle, StringComparison.Ordinal);
+
             if (result != null)
             {
                 ShowProgressToast(result);
+                if (result.CompletedNow && !leveledUp)
+                {
+                    PlayCustomSound("soft_bubble.wav");
+                }
+            }
+
+            if (leveledUp)
+            {
+                PlayCustomSound("cheery_tune.wav");
             }
         }
         catch (Exception ex)
@@ -190,12 +200,44 @@ public sealed class Plugin : IDalamudPlugin
                 Position = QuestToastPosition.Centre,
                 IconId = GetToastIconId(result.QuestType),
                 DisplayCheckmark = true,
-                PlaySound = Configuration.SoundEnabled,
+                PlaySound = false,
             });
         }
         catch (Exception ex)
         {
             PluginLog.Warning($"Failed to show progress toast: {ex.Message}");
+        }
+    }
+
+    private void PlayCustomSound(string fileName)
+    {
+        if (!Configuration.SoundEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var assemblyDir = PluginInterface.AssemblyLocation.DirectoryName;
+            if (string.IsNullOrWhiteSpace(assemblyDir))
+            {
+                return;
+            }
+
+            var soundPath = Path.Combine(assemblyDir, "Resources", fileName);
+            if (!File.Exists(soundPath))
+            {
+                return;
+            }
+
+            if (!PlaySound(soundPath, nint.Zero, SndFilename | SndAsync))
+            {
+                PluginLog.Warning($"Failed to play custom sound '{fileName}' from: {soundPath}");
+            }
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warning($"Failed to queue custom sound '{fileName}': {ex.Message}");
         }
     }
 

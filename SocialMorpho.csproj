@@ -61,6 +61,12 @@
     <None Include="Resources\Square.png" Condition="Exists('Resources\\Square.png')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="Resources\cheery_tune.wav" Condition="Exists('Resources\\cheery_tune.wav')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Resources\soft_bubble.wav" Condition="Exists('Resources\\soft_bubble.wav')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <Target Name="PackagePlugin" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">

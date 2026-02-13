@@ -16,6 +16,7 @@ public class SocialStats
     public string WeeklyRank { get; set; } = "Sproutling";
     public string UnlockedTitle { get; set; } = "New Adventurer";
     public List<DailyCompletionEntry> RecentDailyCompletions { get; set; } = new();
+    public Dictionary<string, int> EmoteReceivedCounts { get; set; } = new();
 }
 
 [Serializable]
@@ -34,4 +35,22 @@ public class ProgressUpdateResult
     public required int NewCount { get; init; }
     public required int GoalCount { get; init; }
     public required bool CompletedNow { get; init; }
+}
+
+public class TitleProgressInfo
+{
+    public required string CurrentTitle { get; init; }
+    public required string NextTitle { get; init; }
+    public required int CurrentCompletions { get; init; }
+    public required int NextRequirement { get; init; }
+    public required int RemainingToNext { get; init; }
+}
+
+public class SecretTitleProgressInfo
+{
+    public required string Title { get; init; }
+    public required string EmoteKey { get; init; }
+    public required int CurrentCount { get; init; }
+    public required int Requirement { get; init; }
+    public required bool Unlocked { get; init; }
 }

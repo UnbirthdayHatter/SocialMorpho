@@ -457,13 +457,30 @@ ImGui.InputText("Title", ref newQuestTitle, 100);
         if (ImGui.CollapsingHeader("Analytics"))
         {
             var stats = QuestManager.GetStats();
+            var titleProgress = QuestManager.GetTitleProgress();
+            var secretProgress = QuestManager.GetSecretTitleProgress();
+
             ImGui.Text($"Unlocked Title: {stats.UnlockedTitle}");
+            ImGui.Text($"Current Title Tier: {titleProgress.CurrentTitle}");
+            ImGui.Text($"Next Title Tier: {titleProgress.NextTitle}");
+            ImGui.Text($"XP To Next Title: {titleProgress.RemainingToNext} completion(s)");
             ImGui.Text($"Weekly Rank: {stats.WeeklyRank}");
             ImGui.Text($"Total Progress Ticks: {stats.TotalProgressTicks}");
             ImGui.Text($"Total Completions: {stats.TotalCompletions}");
             ImGui.Text($"Current Streak: {stats.CurrentStreakDays} day(s)");
             ImGui.Text($"Best Streak: {stats.BestStreakDays} day(s)");
             ImGui.Text($"Weekly Completions: {stats.WeeklyCompletions}");
+
+            if (secretProgress.Count > 0)
+            {
+                ImGui.Separator();
+                ImGui.Text("Secret Titles");
+                foreach (var entry in secretProgress)
+                {
+                    var status = entry.Unlocked ? "Unlocked" : "Locked";
+                    ImGui.Text($"{entry.Title}: {entry.CurrentCount}/{entry.Requirement} ({status})");
+                }
+            }
 
             if (stats.RecentDailyCompletions.Count > 0)
             {
