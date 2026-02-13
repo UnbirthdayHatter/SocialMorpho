@@ -392,6 +392,16 @@ public sealed class Plugin : IDalamudPlugin
             changed = true;
         }
 
+        if (Configuration.Version < 4)
+        {
+            // Ensure legacy users are opted into shared-title visibility by default.
+            Configuration.EnableTitleSync = true;
+            Configuration.ShareTitleSync = true;
+            Configuration.ShowSyncedTitles = true;
+            Configuration.Version = 4;
+            changed = true;
+        }
+
         if (changed)
         {
             Configuration.Save();

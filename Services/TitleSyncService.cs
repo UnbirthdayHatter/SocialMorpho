@@ -225,12 +225,16 @@ public sealed class TitleSyncService : IDisposable
 
             var character = TryGetName(obj);
             var world = TryGetWorld(obj);
-            if (string.IsNullOrWhiteSpace(character) || string.IsNullOrWhiteSpace(world))
+            if (string.IsNullOrWhiteSpace(character))
             {
                 continue;
             }
 
-            result.Add(new LookupPlayer { character = character, world = world });
+            result.Add(new LookupPlayer
+            {
+                character = character,
+                world = string.IsNullOrWhiteSpace(world) ? string.Empty : world,
+            });
             if (result.Count >= 100)
             {
                 break;
@@ -286,7 +290,7 @@ public sealed class TitleSyncService : IDisposable
     private bool TryGetLocalCharacter(out string character, out string world)
     {
         character = string.Empty;
-        world = string.Empty;
+        world = "unknown";
 
         var player = this.objectTable.LocalPlayer;
         if (player == null)
@@ -295,8 +299,13 @@ public sealed class TitleSyncService : IDisposable
         }
 
         character = TryGetName(player) ?? string.Empty;
-        world = TryGetWorld(player) ?? string.Empty;
-        return !string.IsNullOrWhiteSpace(character) && !string.IsNullOrWhiteSpace(world);
+        var localWorld = TryGetWorld(player);
+        if (!string.IsNullOrWhiteSpace(localWorld))
+        {
+            world = localWorld;
+        }
+
+        return !string.IsNullOrWhiteSpace(character);
     }
 
     private static string? TryGetName(object source)
