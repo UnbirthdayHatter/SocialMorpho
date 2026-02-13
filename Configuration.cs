@@ -27,6 +27,7 @@ public class Configuration : IPluginConfiguration
     public SocialStats Stats { get; set; } = new();
     public bool ShowRewardTitleOnNameplate { get; set; } = false;
     public string RewardTitleColorPreset { get; set; } = "Gold";
+    public string SelectedStarterTitle { get; set; } = "New Adventurer";
     public bool EnableTitleSync { get; set; } = true;
     public bool ShareTitleSync { get; set; } = true;
     public bool ShowSyncedTitles { get; set; } = true;

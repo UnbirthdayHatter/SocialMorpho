@@ -382,6 +382,30 @@ public sealed class Plugin : IDalamudPlugin
             Configuration.TitleSyncApiUrl = Configuration.DefaultTitleSyncApiUrl;
             changed = true;
         }
+        else if (!Configuration.TitleSyncApiUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            Configuration.TitleSyncApiUrl = Configuration.DefaultTitleSyncApiUrl;
+            changed = true;
+        }
+
+        // Keep sync always on by default for shared-title experience.
+        if (!Configuration.EnableTitleSync)
+        {
+            Configuration.EnableTitleSync = true;
+            changed = true;
+        }
+
+        if (!Configuration.ShareTitleSync)
+        {
+            Configuration.ShareTitleSync = true;
+            changed = true;
+        }
+
+        if (!Configuration.ShowSyncedTitles)
+        {
+            Configuration.ShowSyncedTitles = true;
+            changed = true;
+        }
 
         if (Configuration.Version < 2)
         {

@@ -39,6 +39,14 @@ public class QuestManager
         new TitleTier("Social Star", 30),
         new TitleTier("Heart of Eorzea", 75),
     };
+    private static readonly HashSet<string> StarterSelectableTitles = new(StringComparer.Ordinal)
+    {
+        "New Adventurer",
+        "Wandering Soul",
+        "Friendly Face",
+        "Lantern Smile",
+        "City Sprout",
+    };
 
     private static readonly List<SecretTitleTier> SecretTitleTiers = new()
     {
@@ -379,7 +387,7 @@ public class QuestManager
             }
         }
 
-        Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats);
+        Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats, Configuration.SelectedStarterTitle);
         if (!string.IsNullOrWhiteSpace(trackedEvent))
         {
             MarkEventSeen(trackedEvent, now);
@@ -449,7 +457,7 @@ public class QuestManager
             }
         }
 
-        Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats);
+        Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats, Configuration.SelectedStarterTitle);
         Configuration.Save();
         return new ProgressUpdateResult
         {
@@ -800,7 +808,7 @@ public class QuestManager
         stats.TotalCompletions++;
         stats.WeeklyCompletions++;
         stats.WeeklyRank = GetWeeklyRank(stats.WeeklyCompletions);
-        stats.UnlockedTitle = GetUnlockedTitle(stats);
+        stats.UnlockedTitle = GetUnlockedTitle(stats, Configuration.SelectedStarterTitle);
 
         if (stats.LastCompletionDate.HasValue)
         {
@@ -888,7 +896,7 @@ public class QuestManager
         var counts = Configuration.Stats.EmoteReceivedCounts;
         counts.TryGetValue(eventKey, out var current);
         counts[eventKey] = current + 1;
-        Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats);
+        Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats, Configuration.SelectedStarterTitle);
         return true;
     }
 
@@ -965,7 +973,7 @@ public class QuestManager
         return null;
     }
 
-    private static string GetUnlockedTitle(SocialStats stats)
+    private static string GetUnlockedTitle(SocialStats stats, string selectedStarterTitle)
     {
         foreach (var secret in SecretTitleTiers)
         {
@@ -979,6 +987,11 @@ public class QuestManager
         if (totalCompletions >= 75) return "Heart of Eorzea";
         if (totalCompletions >= 30) return "Social Star";
         if (totalCompletions >= 10) return "Budding Friend";
+        if (!string.IsNullOrWhiteSpace(selectedStarterTitle) && StarterSelectableTitles.Contains(selectedStarterTitle))
+        {
+            return selectedStarterTitle;
+        }
+
         return "New Adventurer";
     }
 

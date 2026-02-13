@@ -82,8 +82,7 @@ public sealed class NameplateTitleService : IDisposable
                 handler.DisplayTitle = true;
                 handler.IsPrefixTitle = true;
                 handler.SetField(NamePlateStringField.Title, prefixedTitle);
-                handler.TextColor = textColor;
-                handler.EdgeColor = edgeColor;
+                TrySetTitleOnlyColors(handler, textColor, edgeColor);
             }
             catch (Exception ex)
             {
@@ -133,6 +132,31 @@ public sealed class NameplateTitleService : IDisposable
         }
 
         return false;
+    }
+
+    private static void TrySetTitleOnlyColors(INamePlateUpdateHandler handler, uint textColor, uint edgeColor)
+    {
+        // Avoid touching handler.TextColor/EdgeColor (that can tint player name text).
+        // Use title-specific fields only when available in current Dalamud build.
+        TrySetProperty(handler, "TitleTextColor", textColor);
+        TrySetProperty(handler, "TitleEdgeColor", edgeColor);
+        TrySetProperty(handler, "PrefixTextColor", textColor);
+        TrySetProperty(handler, "PrefixEdgeColor", edgeColor);
+    }
+
+    private static void TrySetProperty(object target, string propertyName, uint value)
+    {
+        try
+        {
+            var p = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+            if (p != null && p.CanWrite && p.PropertyType == typeof(uint))
+            {
+                p.SetValue(target, value);
+            }
+        }
+        catch
+        {
+        }
     }
 
     private static (uint textColor, uint edgeColor) GetColors(string preset)

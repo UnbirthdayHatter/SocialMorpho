@@ -203,8 +203,11 @@ public class MainWindow : Window, IDisposable
         bool shareTitleSync = Plugin.Configuration.ShareTitleSync;
         bool showSyncedTitles = Plugin.Configuration.ShowSyncedTitles;
         var rewardTitleColorPreset = Plugin.Configuration.RewardTitleColorPreset;
+        var selectedStarterTitle = Plugin.Configuration.SelectedStarterTitle;
         var presetOptions = new[] { "Solo", "Party", "RP" };
+        var starterTitleOptions = new[] { "New Adventurer", "Wandering Soul", "Friendly Face", "Lantern Smile", "City Sprout" };
         var titleProgress = QuestManager.GetTitleProgress();
+        var stats = QuestManager.GetStats();
         var secretProgress = QuestManager.GetSecretTitleProgress();
         var unlockedSecrets = new HashSet<string>(secretProgress.Where(s => s.Unlocked).Select(s => s.Title), StringComparer.Ordinal);
 
@@ -238,6 +241,28 @@ public class MainWindow : Window, IDisposable
                 var pct = needed <= 0 ? 1f : Math.Clamp((float)earned / needed, 0f, 1f);
                 ImGui.ProgressBar(pct, new Vector2(-1f, 22f), $"{earned}/{needed} completions");
                 ImGui.TextDisabled($"{titleProgress.RemainingToNext} completion(s) remaining");
+
+                if (stats.TotalCompletions < 10)
+                {
+                    if (ImGui.BeginCombo("Starter Title", selectedStarterTitle))
+                    {
+                        foreach (var option in starterTitleOptions)
+                        {
+                            var selected = selectedStarterTitle == option;
+                            if (ImGui.Selectable(option, selected))
+                            {
+                                selectedStarterTitle = option;
+                                Plugin.Configuration.SelectedStarterTitle = option;
+                                Plugin.Configuration.Stats.UnlockedTitle = option;
+                                Plugin.Configuration.Save();
+                                Plugin.RefreshNameplateTitlePreview();
+                            }
+                        }
+
+                        ImGui.EndCombo();
+                    }
+                    ImGui.TextDisabled("Available until 10 completions.");
+                }
             }
 
             if (ImGui.CollapsingHeader("Tracker"))
@@ -440,8 +465,6 @@ public class MainWindow : Window, IDisposable
 
             if (ImGui.CollapsingHeader("Analytics"))
             {
-                var stats = QuestManager.GetStats();
-
                 if (ImGui.BeginTable("##AnalyticsSummary", 2, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
                 {
                     DrawStatRow("Unlocked Title", stats.UnlockedTitle);

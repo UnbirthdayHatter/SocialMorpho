@@ -165,7 +165,7 @@ public sealed class TitleSyncService : IDisposable
             if (!res.IsSuccessStatusCode)
             {
                 var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
-                this.log.Warning($"Title sync push failed HTTP {(int)res.StatusCode}: {body}");
+                this.log.Warning($"Title sync push failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
                 return;
             }
 
@@ -210,7 +210,7 @@ public sealed class TitleSyncService : IDisposable
             if (!res.IsSuccessStatusCode)
             {
                 var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
-                this.log.Warning($"Title sync pull failed HTTP {(int)res.StatusCode}: {body}");
+                this.log.Warning($"Title sync pull failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
                 return;
             }
 
