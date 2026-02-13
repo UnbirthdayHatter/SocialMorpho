@@ -79,6 +79,34 @@ public sealed class TitleSyncService : IDisposable
         return false;
     }
 
+    public bool TryGetSyncedForCharacter(string characterName, out SyncedTitleRecord record)
+    {
+        record = default!;
+        if (string.IsNullOrWhiteSpace(characterName))
+        {
+            return false;
+        }
+
+        var charOnlyKey = $"title:{characterName.Trim().ToLowerInvariant()}";
+        if (this.cache.TryGetValue(charOnlyKey, out record!))
+        {
+            return true;
+        }
+
+        foreach (var kvp in this.cache)
+        {
+            if (!kvp.Key.StartsWith(charOnlyKey + "@", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            record = kvp.Value;
+            return true;
+        }
+
+        return false;
+    }
+
     public void RequestPushSoon()
     {
         this.nextPushAtUtc = DateTime.MinValue;

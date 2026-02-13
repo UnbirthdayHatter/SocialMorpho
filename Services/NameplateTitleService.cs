@@ -1,5 +1,6 @@
 using Dalamud.Game.Gui.NamePlate;
 using Dalamud.Plugin.Services;
+using System.Reflection;
 
 namespace SocialMorpho.Services;
 
@@ -51,6 +52,14 @@ public sealed class NameplateTitleService : IDisposable
                 title = remote.title;
                 colorPreset = string.IsNullOrWhiteSpace(remote.colorPreset) ? "Gold" : remote.colorPreset;
             }
+            else if (syncEnabled &&
+                     TryGetHandlerCharacterName(handler, out var handlerName) &&
+                     this.titleSyncService.TryGetSyncedForCharacter(handlerName, out var byName) &&
+                     !string.IsNullOrWhiteSpace(byName.title))
+            {
+                title = byName.title;
+                colorPreset = string.IsNullOrWhiteSpace(byName.colorPreset) ? "Gold" : byName.colorPreset;
+            }
 
             if (string.IsNullOrWhiteSpace(title))
             {
@@ -78,6 +87,44 @@ public sealed class NameplateTitleService : IDisposable
     public void RequestRedraw()
     {
         this.namePlateGui.RequestRedraw();
+    }
+
+    private static bool TryGetHandlerCharacterName(INamePlateUpdateHandler handler, out string name)
+    {
+        name = string.Empty;
+        var candidates = new[] { "Name", "PlayerName", "DisplayName", "ObjectName" };
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                var prop = handler.GetType().GetProperty(candidate, BindingFlags.Public | BindingFlags.Instance);
+                var value = prop?.GetValue(handler);
+                if (value == null)
+                {
+                    continue;
+                }
+
+                var textValueProp = value.GetType().GetProperty("TextValue", BindingFlags.Public | BindingFlags.Instance);
+                var text = textValueProp?.GetValue(value) as string;
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    name = text.Trim();
+                    return true;
+                }
+
+                var raw = value.ToString();
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    name = raw.Trim();
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return false;
     }
 
     private static (uint textColor, uint edgeColor) GetColors(string preset)
