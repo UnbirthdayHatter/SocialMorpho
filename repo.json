@@ -3,7 +3,7 @@
     "Author": "UnbirthdayHatter",
     "Name": "SocialMorpho",
     "InternalName": "SocialMorpho",
-    "AssemblyVersion": "1.2.4.0",
+    "AssemblyVersion": "1.2.5.0",
     "Description": "A plugin designed to enhance the social ecosystem in FFXIV.",
     "IconUrl": "https://raw.githubusercontent.com/UnbirthdayHatter/SocialMorpho/main/Resources/quest_icon.png",
     "ApplicableVersion": "any",

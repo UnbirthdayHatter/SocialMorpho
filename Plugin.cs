@@ -275,7 +275,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         try
         {
-            var previewIcons = new[] { 61412u, 61413u, 61414u };
+            var previewIcons = new[] { 61412u, 61413u, 61414u, 63926u };
             foreach (var icon in previewIcons)
             {
                 ToastGui.ShowQuest($"SocialMorpho Icon Preview ({icon})", new Dalamud.Game.Gui.Toast.QuestToastOptions
