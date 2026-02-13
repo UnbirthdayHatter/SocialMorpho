@@ -30,6 +30,7 @@ public class Configuration : IPluginConfiguration
     public bool ShowQuestTracker { get; set; } = true;
     public bool ShowQuestTrackerOnLogin { get; set; } = true;
     public bool ShowLoginNotification { get; set; } = true;
+    public bool AutoLoadJsonQuests { get; set; } = false;
 
     [NonSerialized]
     private IDalamudPluginInterface? PluginInterface;
