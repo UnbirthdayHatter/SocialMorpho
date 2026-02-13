@@ -130,6 +130,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: true
 
       - name: Download latest.zip artifact
         uses: actions/download-artifact@v4
@@ -149,7 +151,6 @@ jobs:
           fi
           PATCH=${PATCH:-0}
 
-          git fetch --tags --force
           LATEST_PATCH=$(git tag -l "v${MAJOR}.${MINOR}.*" \
             | sed -E "s/^v${MAJOR}\\.${MINOR}\\.([0-9]+)$/\\1/" \
             | awk '/^[0-9]+$/' \
