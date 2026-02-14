@@ -32,6 +32,7 @@ public sealed class TitleSyncService : IDisposable
     private DateTime lastPullErrorLogUtc = DateTime.MinValue;
     private DateTime lastPushErrorLogUtc = DateTime.MinValue;
     private DateTime lastHonorificWarnUtc = DateTime.MinValue;
+    private DateTime lastHonorificInfoUtc = DateTime.MinValue;
 
     public TitleSyncService(Plugin plugin, IClientState clientState, IObjectTable objectTable, IPluginLog log)
     {
@@ -64,14 +65,13 @@ public sealed class TitleSyncService : IDisposable
                 PushLocalTitleToHonorific();
                 this.nextPushAtUtc = now.AddSeconds(20);
             }
-
-            if (cfg.ShowSyncedTitles && now >= this.nextPullAtUtc)
-            {
-                PullHonorificTitlesIntoCache();
-                this.nextPullAtUtc = now.AddSeconds(10);
-            }
-
-            return;
+        }
+        
+        // Always keep Honorific cache fresh when available.
+        if (cfg.ShowSyncedTitles && this.honorificBridgeActive && now >= this.nextPullAtUtc)
+        {
+            PullHonorificTitlesIntoCache();
+            this.nextPullAtUtc = now.AddSeconds(10);
         }
 
         if (cfg.ShareTitleSync && now >= this.nextPushAtUtc && !this.pushInFlight)
@@ -297,6 +297,11 @@ public sealed class TitleSyncService : IDisposable
             {
                 this.lastHonorificWarnUtc = DateTime.UtcNow;
                 this.log.Warning("Honorific fallback active but no nearby titles were returned.");
+            }
+            else if (added > 0 && DateTime.UtcNow - this.lastHonorificInfoUtc >= TimeSpan.FromMinutes(1))
+            {
+                this.lastHonorificInfoUtc = DateTime.UtcNow;
+                this.log.Info($"Honorific title cache refreshed for {added} nearby player(s).");
             }
         }
         catch

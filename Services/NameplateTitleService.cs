@@ -170,23 +170,28 @@ public sealed class NameplateTitleService : IDisposable
     {
         // FFXIV-style readable edge with accent text.
         // Nameplate packed colors use ABGR ordering.
-        var edge = 0xFF101010u;
+        var edge = ToAbgr(0x10, 0x10, 0x10);
         return preset switch
         {
-            "Pink" => (0xFFBB8BF0u, edge),
-            "Cyan" => (0xFFFFD678u, edge),
-            "Rose" => (0xFF9A9AF6u, edge),
-            "Mint" => (0xFFC8F2A0u, edge),
-            "Violet" => (0xFFE8A98Du, edge),
-            "Gold Glow" => (0xFF83C3E5u, 0xFF3C2F15u),
-            "Pink Glow" => (0xFFBB8BF0u, 0xFF3A1C39u),
-            "Cyan Glow" => (0xFFFFD678u, 0xFF1A3A3Au),
-            "Rose Glow" => (0xFF9A9AF6u, 0xFF3A203Au),
-            "Mint Glow" => (0xFFC8F2A0u, 0xFF1E3824u),
-            "Violet Glow" => (0xFFE8A98Du, 0xFF2A2140u),
-            "White Glow" => (0xFFF2F2F2u, 0xFF2A2A2Au),
-            _ => (0xFF83C3E5u, edge), // Gold
+            "Pink" => (ToAbgr(0xF0, 0x8B, 0xBB), edge),
+            "Cyan" => (ToAbgr(0x78, 0xD6, 0xFF), edge),
+            "Rose" => (ToAbgr(0xF6, 0x9A, 0x9A), edge),
+            "Mint" => (ToAbgr(0xA0, 0xF2, 0xC8), edge),
+            "Violet" => (ToAbgr(0x8D, 0xA9, 0xE8), edge),
+            "Gold Glow" => (ToAbgr(0xE5, 0xC3, 0x83), ToAbgr(0x3C, 0x2F, 0x15)),
+            "Pink Glow" => (ToAbgr(0xF0, 0x8B, 0xBB), ToAbgr(0x3A, 0x1C, 0x39)),
+            "Cyan Glow" => (ToAbgr(0x78, 0xD6, 0xFF), ToAbgr(0x1A, 0x3A, 0x3A)),
+            "Rose Glow" => (ToAbgr(0xF6, 0x9A, 0x9A), ToAbgr(0x3A, 0x20, 0x3A)),
+            "Mint Glow" => (ToAbgr(0xA0, 0xF2, 0xC8), ToAbgr(0x1E, 0x38, 0x24)),
+            "Violet Glow" => (ToAbgr(0x8D, 0xA9, 0xE8), ToAbgr(0x2A, 0x21, 0x40)),
+            "White Glow" => (ToAbgr(0xF2, 0xF2, 0xF2), ToAbgr(0x2A, 0x2A, 0x2A)),
+            _ => (ToAbgr(0xE5, 0xC3, 0x83), edge), // Gold
         };
+    }
+
+    private static uint ToAbgr(byte r, byte g, byte b)
+    {
+        return 0xFF000000u | ((uint)b << 16) | ((uint)g << 8) | r;
     }
 
     public void Dispose()
