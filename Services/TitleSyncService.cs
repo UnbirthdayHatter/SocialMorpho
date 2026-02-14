@@ -520,6 +520,18 @@ public sealed class TitleSyncService : IDisposable
             return null;
         }
 
+        if (value is System.Collections.IEnumerable enumerable && value is not string)
+        {
+            foreach (var item in enumerable)
+            {
+                var nested = ExtractHonorificTitleText(item);
+                if (!string.IsNullOrWhiteSpace(nested))
+                {
+                    return nested;
+                }
+            }
+        }
+
         if (value is string s)
         {
             var parsedFromJson = TryExtractTitleFromJsonText(s);
@@ -534,14 +546,40 @@ public sealed class TitleSyncService : IDisposable
         try
         {
             var t = value.GetType();
+
+            // Handle KeyValuePair-like wrappers where title lives in .Value.
+            var valueProp = t.GetProperty("Value", BindingFlags.Public | BindingFlags.Instance);
+            if (valueProp != null)
+            {
+                var nestedValue = valueProp.GetValue(value);
+                var nestedTitle = ExtractHonorificTitleText(nestedValue);
+                if (!string.IsNullOrWhiteSpace(nestedTitle))
+                {
+                    return nestedTitle;
+                }
+            }
+
             foreach (var propName in new[] { "DisplayTitle", "Title", "Text" })
             {
                 var prop = t.GetProperty(propName, BindingFlags.Public | BindingFlags.Instance);
-                var raw = prop?.GetValue(value)?.ToString();
-                if (!string.IsNullOrWhiteSpace(raw))
+                var rawValue = prop?.GetValue(value);
+                var nestedTitle = ExtractHonorificTitleText(rawValue);
+                if (!string.IsNullOrWhiteSpace(nestedTitle))
                 {
-                    return raw.Trim();
+                    return nestedTitle;
                 }
+            }
+
+            var asText = value.ToString();
+            var parsedFromToString = TryExtractTitleFromJsonText(asText ?? string.Empty);
+            if (!string.IsNullOrWhiteSpace(parsedFromToString))
+            {
+                return parsedFromToString;
+            }
+
+            if (!string.IsNullOrWhiteSpace(asText))
+            {
+                return asText.Trim();
             }
         }
         catch

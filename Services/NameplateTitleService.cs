@@ -158,6 +158,7 @@ public sealed class NameplateTitleService : IDisposable
         // Some plugins/styles paint through alternate fields; force-write common fallbacks.
         TrySetProperty(handler, "Color", textColor);
         TrySetProperty(handler, "EdgeColor", edgeColor);
+        TrySetProperty(handler, "TextColor", textColor);
         TrySetProperty(handler, "NameTextColor", textColor);
         TrySetProperty(handler, "NameEdgeColor", edgeColor);
     }
