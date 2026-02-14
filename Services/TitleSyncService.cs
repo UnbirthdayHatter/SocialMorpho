@@ -38,6 +38,17 @@ public sealed class TitleSyncService : IDisposable
     private DateTime lastHonorificWarnUtc = DateTime.MinValue;
     private DateTime lastHonorificInfoUtc = DateTime.MinValue;
     private DateTime lastHonorificCommandFallbackUtc = DateTime.MinValue;
+    private DateTime lastCloudPullAttemptUtc = DateTime.MinValue;
+    private DateTime lastCloudPullSuccessUtc = DateTime.MinValue;
+    private DateTime lastCloudPushAttemptUtc = DateTime.MinValue;
+    private DateTime lastCloudPushSuccessUtc = DateTime.MinValue;
+    private DateTime lastHonorificPullUtc = DateTime.MinValue;
+    private DateTime lastHonorificPushUtc = DateTime.MinValue;
+    private string lastErrorSummary = string.Empty;
+    private string lastNearbySignature = string.Empty;
+    private int idlePullBackoffStage;
+    private int lastNearbyPlayerCount;
+    private readonly Dictionary<string, SeenTracker> seenTrackers = new(StringComparer.OrdinalIgnoreCase);
 
     public TitleSyncService(Plugin plugin, IClientState clientState, IObjectTable objectTable, IPluginLog log)
     {
@@ -90,7 +101,7 @@ public sealed class TitleSyncService : IDisposable
         if (cfg.ShowSyncedTitles && now >= this.nextPullAtUtc && !this.pullInFlight)
         {
             _ = PullNearbyTitlesAsync();
-            this.nextPullAtUtc = now.AddSeconds(30);
+            this.nextPullAtUtc = now.AddSeconds(5);
         }
     }
 
@@ -161,6 +172,71 @@ public sealed class TitleSyncService : IDisposable
         }
 
         return $"SocialMorpho Cloud (primary) ({this.plugin.Configuration.TitleSyncApiUrl})";
+    }
+
+    public TitleSyncHealthSnapshot GetHealthSnapshot()
+    {
+        var now = DateTime.UtcNow;
+        return new TitleSyncHealthSnapshot
+        {
+            ActiveProvider = GetProviderLabel(),
+            HonorificDetected = this.honorificBridgeActive,
+            IsFallbackActive = IsHonorificFallbackActive(this.plugin.Configuration, now),
+            ConsecutiveCloudFailures = this.consecutiveCloudFailures,
+            CacheEntries = this.cache.Count,
+            NearbyPlayersLastScan = this.lastNearbyPlayerCount,
+            LastCloudPullAttemptUtc = this.lastCloudPullAttemptUtc,
+            LastCloudPullSuccessUtc = this.lastCloudPullSuccessUtc,
+            LastCloudPushAttemptUtc = this.lastCloudPushAttemptUtc,
+            LastCloudPushSuccessUtc = this.lastCloudPushSuccessUtc,
+            LastHonorificPullUtc = this.lastHonorificPullUtc,
+            LastHonorificPushUtc = this.lastHonorificPushUtc,
+            LastErrorSummary = this.lastErrorSummary,
+            NextCloudPullUtc = this.nextPullAtUtc,
+            NextCloudPushUtc = this.nextPushAtUtc,
+        };
+    }
+
+    public IReadOnlyList<SyncedTitleRecord> GetSyncedTitleSnapshot(int maxCount = 32)
+    {
+        return this.cache.Values
+            .Where(v => !string.IsNullOrWhiteSpace(v.character) && !string.IsNullOrWhiteSpace(v.title))
+            .GroupBy(v => v.character.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(v => v.updatedAtUtc).First())
+            .OrderBy(v => v.character, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Max(1, maxCount))
+            .ToList();
+    }
+
+    public IReadOnlyList<SyncedTitleLeaderboardEntry> GetRankedSyncedTitleSnapshot(int maxCount = 24)
+    {
+        var now = DateTime.UtcNow;
+        return this.cache.Values
+            .Where(v => !string.IsNullOrWhiteSpace(v.character) && !string.IsNullOrWhiteSpace(v.title))
+            .GroupBy(v => v.character.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(v => v.updatedAtUtc).First())
+            .Select(v =>
+            {
+                var key = v.character.Trim().ToLowerInvariant();
+                this.seenTrackers.TryGetValue(key, out var seen);
+                var ageSeconds = seen == null ? 86400d : Math.Max(1d, (now - seen.LastSeenUtc).TotalSeconds);
+                var recencyScore = 1d / Math.Sqrt(ageSeconds);
+                var consistencyScore = Math.Log10((seen?.SeenCount ?? 1) + 1d);
+                var score = (recencyScore * 100d) + (consistencyScore * 10d);
+                return new SyncedTitleLeaderboardEntry
+                {
+                    Character = v.character,
+                    Title = v.title,
+                    Style = string.IsNullOrWhiteSpace(v.colorPreset) ? "Gold" : v.colorPreset,
+                    SeenCount = seen?.SeenCount ?? 1,
+                    LastSeenUtc = seen?.LastSeenUtc ?? now,
+                    Score = score,
+                };
+            })
+            .OrderByDescending(e => e.Score)
+            .ThenBy(e => e.Character, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Max(1, maxCount))
+            .ToList();
     }
 
     private void OnLogin()
@@ -267,9 +343,11 @@ public sealed class TitleSyncService : IDisposable
 
             this.lastHonorificTitle = encodedTitle;
             this.lastHonorificColor = colorPreset;
+            this.lastHonorificPushUtc = DateTime.UtcNow;
         }
         catch (Exception ex)
         {
+            this.lastErrorSummary = $"Honorific push: {ex.Message}";
             this.log.Warning($"Honorific handoff failed: {ex.Message}");
         }
     }
@@ -315,8 +393,10 @@ public sealed class TitleSyncService : IDisposable
                 };
 
                 this.cache[$"title:{record.character.ToLowerInvariant()}"] = record;
+                TrackSeen(record.character);
                 added++;
             }
+            this.lastHonorificPullUtc = DateTime.UtcNow;
 
             if (added == 0 && DateTime.UtcNow - this.lastHonorificWarnUtc >= TimeSpan.FromMinutes(1))
             {
@@ -822,6 +902,7 @@ public sealed class TitleSyncService : IDisposable
         this.pushInFlight = true;
         try
         {
+            this.lastCloudPushAttemptUtc = DateTime.UtcNow;
             using var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl.TrimEnd('/')}/v1/title/update");
             req.Headers.TryAddWithoutValidation("x-client-version", GetClientVersion());
 
@@ -844,6 +925,7 @@ public sealed class TitleSyncService : IDisposable
                     this.lastPushErrorLogUtc = DateTime.UtcNow;
                     this.log.Warning($"Title sync push failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
                 }
+                this.lastErrorSummary = $"Cloud push HTTP {(int)res.StatusCode}";
                 this.nextPushAtUtc = DateTime.UtcNow.AddMinutes(10);
                 MarkCloudFailure();
                 return;
@@ -851,10 +933,12 @@ public sealed class TitleSyncService : IDisposable
 
             this.lastPushedTitle = title;
             this.lastPushedColor = color;
+            this.lastCloudPushSuccessUtc = DateTime.UtcNow;
             MarkCloudSuccess();
         }
         catch (Exception ex)
         {
+            this.lastErrorSummary = $"Cloud push: {ex.Message}";
             this.log.Warning($"Title sync push failed: {ex.Message}");
             MarkCloudFailure();
         }
@@ -873,9 +957,23 @@ public sealed class TitleSyncService : IDisposable
             return;
         }
 
+        this.lastCloudPullAttemptUtc = DateTime.UtcNow;
         var players = BuildNearbyPlayers();
+        this.lastNearbyPlayerCount = players.Count;
+        var signature = BuildNearbySignature(players);
+        if (string.Equals(signature, this.lastNearbySignature, StringComparison.Ordinal))
+        {
+            this.idlePullBackoffStage = Math.Min(3, this.idlePullBackoffStage + 1);
+        }
+        else
+        {
+            this.idlePullBackoffStage = 0;
+            this.lastNearbySignature = signature;
+        }
+
         if (players.Count == 0)
         {
+            this.nextPullAtUtc = DateTime.UtcNow.AddSeconds(75);
             return;
         }
 
@@ -897,6 +995,7 @@ public sealed class TitleSyncService : IDisposable
                     this.lastPullErrorLogUtc = DateTime.UtcNow;
                     this.log.Warning($"Title sync pull failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
                 }
+                this.lastErrorSummary = $"Cloud pull HTTP {(int)res.StatusCode}";
                 this.nextPullAtUtc = DateTime.UtcNow.AddMinutes(3);
                 MarkCloudFailure();
                 return;
@@ -906,6 +1005,8 @@ public sealed class TitleSyncService : IDisposable
             var parsed = JsonSerializer.Deserialize<BatchResponse>(json);
             if (parsed?.records == null || parsed.records.Count == 0)
             {
+                this.lastCloudPullSuccessUtc = DateTime.UtcNow;
+                this.nextPullAtUtc = DateTime.UtcNow.AddSeconds(GetAdaptivePullSeconds());
                 return;
             }
 
@@ -919,13 +1020,18 @@ public sealed class TitleSyncService : IDisposable
                 this.cache[pair.Key] = pair.Value;
                 var characterOnlyKey = $"title:{pair.Value.character.ToLowerInvariant()}";
                 this.cache[characterOnlyKey] = pair.Value;
+                TrackSeen(pair.Value.character);
             }
 
+            this.lastCloudPullSuccessUtc = DateTime.UtcNow;
+            this.nextPullAtUtc = DateTime.UtcNow.AddSeconds(GetAdaptivePullSeconds());
             MarkCloudSuccess();
         }
         catch (Exception ex)
         {
+            this.lastErrorSummary = $"Cloud pull: {ex.Message}";
             this.log.Warning($"Title sync pull failed: {ex.Message}");
+            this.nextPullAtUtc = DateTime.UtcNow.AddMinutes(2);
             MarkCloudFailure();
         }
         finally
@@ -965,6 +1071,43 @@ public sealed class TitleSyncService : IDisposable
         }
 
         return result;
+    }
+
+    private static string BuildNearbySignature(IEnumerable<LookupPlayer> players)
+    {
+        return string.Join("|", players
+            .Select(p => $"{p.character.ToLowerInvariant()}@{p.world.ToLowerInvariant()}")
+            .OrderBy(x => x, StringComparer.Ordinal));
+    }
+
+    private void TrackSeen(string characterName)
+    {
+        if (string.IsNullOrWhiteSpace(characterName))
+        {
+            return;
+        }
+
+        var key = characterName.Trim().ToLowerInvariant();
+        if (!this.seenTrackers.TryGetValue(key, out var seen))
+        {
+            seen = new SeenTracker();
+            this.seenTrackers[key] = seen;
+        }
+
+        seen.SeenCount++;
+        seen.LastSeenUtc = DateTime.UtcNow;
+    }
+
+    private int GetAdaptivePullSeconds()
+    {
+        // 0: active movement nearby, 1..3: increasingly idle area.
+        return this.idlePullBackoffStage switch
+        {
+            0 => 20,
+            1 => 30,
+            2 => 45,
+            _ => 60,
+        };
     }
 
     private string? TryBuildKeyForGameObject(ulong gameObjectId)
@@ -1273,4 +1416,39 @@ public sealed class SyncedTitleRecord
     public string title { get; set; } = string.Empty;
     public string colorPreset { get; set; } = "Gold";
     public string updatedAtUtc { get; set; } = string.Empty;
+}
+
+public sealed class TitleSyncHealthSnapshot
+{
+    public string ActiveProvider { get; set; } = string.Empty;
+    public bool HonorificDetected { get; set; }
+    public bool IsFallbackActive { get; set; }
+    public int ConsecutiveCloudFailures { get; set; }
+    public int CacheEntries { get; set; }
+    public int NearbyPlayersLastScan { get; set; }
+    public DateTime LastCloudPullAttemptUtc { get; set; }
+    public DateTime LastCloudPullSuccessUtc { get; set; }
+    public DateTime LastCloudPushAttemptUtc { get; set; }
+    public DateTime LastCloudPushSuccessUtc { get; set; }
+    public DateTime LastHonorificPullUtc { get; set; }
+    public DateTime LastHonorificPushUtc { get; set; }
+    public DateTime NextCloudPullUtc { get; set; }
+    public DateTime NextCloudPushUtc { get; set; }
+    public string LastErrorSummary { get; set; } = string.Empty;
+}
+
+public sealed class SyncedTitleLeaderboardEntry
+{
+    public string Character { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Style { get; set; } = "Gold";
+    public int SeenCount { get; set; }
+    public DateTime LastSeenUtc { get; set; }
+    public double Score { get; set; }
+}
+
+internal sealed class SeenTracker
+{
+    public int SeenCount { get; set; } = 0;
+    public DateTime LastSeenUtc { get; set; } = DateTime.MinValue;
 }

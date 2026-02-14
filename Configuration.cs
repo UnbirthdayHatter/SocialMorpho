@@ -27,6 +27,8 @@ public class Configuration : IPluginConfiguration
     public SocialStats Stats { get; set; } = new();
     public bool ShowRewardTitleOnNameplate { get; set; } = false;
     public string RewardTitleColorPreset { get; set; } = "Gold";
+    public bool EnablePerTitleStyleProfiles { get; set; } = true;
+    public Dictionary<string, string> TitleStyleProfiles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public bool ForceSocialMorphoTitleColors { get; set; } = false;
     public string SelectedStarterTitle { get; set; } = "New Adventurer";
     public bool EnableTitleSync { get; set; } = true;
@@ -41,6 +43,10 @@ public class Configuration : IPluginConfiguration
     public bool ShowQuestTrackerOnLogin { get; set; } = true;
     public bool ShowLoginNotification { get; set; } = true;
     public bool AutoLoadJsonQuests { get; set; } = false;
+    public string AntiCheeseTier { get; set; } = "Balanced";
+    public bool EnableQuestChains { get; set; } = true;
+    public DateTime? LastDailyChainDate { get; set; }
+    public int DailyChainCompletions { get; set; } = 0;
 
     [NonSerialized]
     private IDalamudPluginInterface? PluginInterface;

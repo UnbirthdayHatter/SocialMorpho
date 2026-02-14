@@ -35,6 +35,18 @@ public class ProgressUpdateResult
     public required int NewCount { get; init; }
     public required int GoalCount { get; init; }
     public required bool CompletedNow { get; init; }
+    public string? ChainBonusQuestTitle { get; init; }
+    public BonusQuestOfferPayload? BonusOffer { get; init; }
+}
+
+public class BonusQuestOfferPayload
+{
+    public required ulong QuestId { get; init; }
+    public required string QuestTitle { get; init; }
+    public required string QuestDescription { get; init; }
+    public required QuestType QuestType { get; init; }
+    public required int GoalCount { get; init; }
+    public List<string> TriggerPhrases { get; init; } = new();
 }
 
 public class TitleProgressInfo

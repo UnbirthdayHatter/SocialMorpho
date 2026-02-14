@@ -199,10 +199,13 @@ public class MainWindow : Window, IDisposable
         bool showQuestTrackerOnLogin = Plugin.Configuration.ShowQuestTrackerOnLogin;
         bool showLoginNotification = Plugin.Configuration.ShowLoginNotification;
         bool showRewardTitleOnNameplate = Plugin.Configuration.ShowRewardTitleOnNameplate;
+        bool enablePerTitleStyleProfiles = Plugin.Configuration.EnablePerTitleStyleProfiles;
         bool forceSocialMorphoTitleColors = Plugin.Configuration.ForceSocialMorphoTitleColors;
         bool enableTitleSync = Plugin.Configuration.EnableTitleSync;
         bool shareTitleSync = Plugin.Configuration.ShareTitleSync;
         bool showSyncedTitles = Plugin.Configuration.ShowSyncedTitles;
+        bool enableQuestChains = Plugin.Configuration.EnableQuestChains;
+        var antiCheeseTier = string.IsNullOrWhiteSpace(Plugin.Configuration.AntiCheeseTier) ? "Balanced" : Plugin.Configuration.AntiCheeseTier;
         var rewardTitleColorPreset = Plugin.Configuration.RewardTitleColorPreset;
         var selectedStarterTitle = Plugin.Configuration.SelectedStarterTitle;
         var presetOptions = new[] { "Solo", "Party", "RP" };
@@ -358,6 +361,33 @@ public class MainWindow : Window, IDisposable
 
                     ImGui.EndCombo();
                 }
+
+                if (ImGui.Checkbox("Enable Per-Title Style Profiles", ref enablePerTitleStyleProfiles))
+                {
+                    Plugin.Configuration.EnablePerTitleStyleProfiles = enablePerTitleStyleProfiles;
+                    Plugin.Configuration.Save();
+                    Plugin.RefreshNameplateTitlePreview();
+                }
+
+                var currentUnlocked = string.IsNullOrWhiteSpace(stats.UnlockedTitle) ? "New Adventurer" : stats.UnlockedTitle;
+                if (ImGui.Button("Save Current Style To Current Title"))
+                {
+                    Plugin.Configuration.TitleStyleProfiles[currentUnlocked] = rewardTitleColorPreset;
+                    Plugin.Configuration.Save();
+                    Plugin.RefreshNameplateTitlePreview();
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Clear Current Title Style"))
+                {
+                    Plugin.Configuration.TitleStyleProfiles.Remove(currentUnlocked);
+                    Plugin.Configuration.Save();
+                    Plugin.RefreshNameplateTitlePreview();
+                }
+                ImGui.TextDisabled($"Current title profile target: {currentUnlocked}");
+                if (Plugin.Configuration.TitleStyleProfiles.TryGetValue(currentUnlocked, out var mappedStyle) && !string.IsNullOrWhiteSpace(mappedStyle))
+                {
+                    ImGui.TextDisabled($"Mapped style: {mappedStyle}");
+                }
             }
 
             if (ImGui.CollapsingHeader("Title Sync (Phase 1)"))
@@ -391,6 +421,25 @@ public class MainWindow : Window, IDisposable
 
                 ImGui.TextDisabled($"Active provider: {Plugin.GetTitleSyncProviderLabel()}");
                 ImGui.TextDisabled("Cloud sync is primary. Honorific/Lightless activates after repeated cloud failures.");
+
+                ImGui.Spacing();
+                ImGui.Text("Sync Health");
+                var health = Plugin.GetTitleSyncHealth();
+                if (ImGui.BeginTable("##SyncHealthTable", 2, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+                {
+                    DrawStatRow("Provider", health.ActiveProvider);
+                    DrawStatRow("Honorific Detected", health.HonorificDetected ? "Yes" : "No");
+                    DrawStatRow("Fallback Active", health.IsFallbackActive ? "Yes" : "No");
+                    DrawStatRow("Consecutive Cloud Failures", health.ConsecutiveCloudFailures.ToString());
+                    DrawStatRow("Nearby Players (Last Scan)", health.NearbyPlayersLastScan.ToString());
+                    DrawStatRow("Cache Entries", health.CacheEntries.ToString());
+                    DrawStatRow("Last Cloud Pull", health.LastCloudPullSuccessUtc == DateTime.MinValue ? "-" : health.LastCloudPullSuccessUtc.ToLocalTime().ToString("HH:mm:ss"));
+                    DrawStatRow("Last Cloud Push", health.LastCloudPushSuccessUtc == DateTime.MinValue ? "-" : health.LastCloudPushSuccessUtc.ToLocalTime().ToString("HH:mm:ss"));
+                    DrawStatRow("Last Honorific Pull", health.LastHonorificPullUtc == DateTime.MinValue ? "-" : health.LastHonorificPullUtc.ToLocalTime().ToString("HH:mm:ss"));
+                    DrawStatRow("Last Honorific Push", health.LastHonorificPushUtc == DateTime.MinValue ? "-" : health.LastHonorificPushUtc.ToLocalTime().ToString("HH:mm:ss"));
+                    DrawStatRow("Last Error", string.IsNullOrWhiteSpace(health.LastErrorSummary) ? "-" : health.LastErrorSummary);
+                    ImGui.EndTable();
+                }
             }
 
             if (ImGui.CollapsingHeader("Daily Quests"))
@@ -416,6 +465,28 @@ public class MainWindow : Window, IDisposable
                 {
                     QuestManager.ForceRerollDailyQuests(DateTime.Now);
                     packStatusMessage = "Daily quests re-rolled for current preset.";
+                }
+
+                if (ImGui.Checkbox("Enable Daily Quest Chains", ref enableQuestChains))
+                {
+                    Plugin.Configuration.EnableQuestChains = enableQuestChains;
+                    Plugin.Configuration.Save();
+                }
+
+                var antiCheeseOptions = new[] { "Relaxed", "Balanced", "Strict" };
+                if (ImGui.BeginCombo("Anti-Cheese Cooldown Tier", antiCheeseTier))
+                {
+                    foreach (var option in antiCheeseOptions)
+                    {
+                        var selected = antiCheeseTier == option;
+                        if (ImGui.Selectable(option, selected))
+                        {
+                            antiCheeseTier = option;
+                            Plugin.Configuration.AntiCheeseTier = option;
+                            Plugin.Configuration.Save();
+                        }
+                    }
+                    ImGui.EndCombo();
                 }
             }
 
@@ -535,6 +606,41 @@ public class MainWindow : Window, IDisposable
 
                         ImGui.EndTable();
                     }
+                }
+
+                ImGui.Spacing();
+                ImGui.Text("Nearby Friends Leaderboard (Session)");
+                var synced = Plugin.GetRankedSyncedTitleSnapshot(24);
+                if (synced.Count == 0)
+                {
+                    ImGui.TextDisabled("No synced nearby players yet.");
+                }
+                else if (ImGui.BeginTable("##SyncedLeaderboard", 5, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+                {
+                    ImGui.TableSetupColumn("#", ImGuiTableColumnFlags.WidthFixed, 24f);
+                    ImGui.TableSetupColumn("Player");
+                    ImGui.TableSetupColumn("Title");
+                    ImGui.TableSetupColumn("Style");
+                    ImGui.TableSetupColumn("Seen");
+                    ImGui.TableHeadersRow();
+
+                    for (var i = 0; i < synced.Count; i++)
+                    {
+                        var entry = synced[i];
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted((i + 1).ToString());
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(entry.Character);
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(entry.Title);
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(string.IsNullOrWhiteSpace(entry.Style) ? "Gold" : entry.Style);
+                        ImGui.TableNextColumn();
+                        ImGui.TextUnformatted(entry.SeenCount.ToString());
+                    }
+
+                    ImGui.EndTable();
                 }
             }
 

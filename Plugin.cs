@@ -79,6 +79,7 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.Initialize(PluginInterface);
         MigrateToThreeDailyQuestModel();
         MigrateTitleSyncDefaults();
+        MigrateGameplayDefaults();
         MigrateDoteQuestText();
         MigrateLegacyStarterQuests();
 
@@ -202,6 +203,14 @@ public sealed class Plugin : IDalamudPlugin
         if (result != null)
         {
             ShowProgressToast(result);
+            if (!string.IsNullOrWhiteSpace(result.ChainBonusQuestTitle))
+            {
+                ShowChainBonusToast(result.ChainBonusQuestTitle);
+            }
+            if (result.BonusOffer != null)
+            {
+                QuestOfferService.TriggerBonusOfferPopup(result.BonusOffer);
+            }
             if (result.CompletedNow && !leveledUp)
             {
                 PlayCustomSound("soft_bubble.wav");
@@ -236,6 +245,24 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception ex)
         {
             PluginLog.Warning($"Failed to show progress toast: {ex.Message}");
+        }
+    }
+
+    private void ShowChainBonusToast(string bonusQuestTitle)
+    {
+        try
+        {
+            ToastGui.ShowQuest($"Featured quest unlocked: {bonusQuestTitle}", new QuestToastOptions
+            {
+                Position = QuestToastPosition.Centre,
+                IconId = 63926u,
+                DisplayCheckmark = true,
+                PlaySound = false,
+            });
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warning($"Failed to show chain bonus toast: {ex.Message}");
         }
     }
 
@@ -464,6 +491,39 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.Save();
     }
 
+    private void MigrateGameplayDefaults()
+    {
+        var changed = false;
+        if (string.IsNullOrWhiteSpace(Configuration.AntiCheeseTier))
+        {
+            Configuration.AntiCheeseTier = "Balanced";
+            changed = true;
+        }
+
+        if (Configuration.TitleStyleProfiles == null)
+        {
+            Configuration.TitleStyleProfiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            changed = true;
+        }
+
+        if (!Configuration.EnablePerTitleStyleProfiles)
+        {
+            Configuration.EnablePerTitleStyleProfiles = true;
+            changed = true;
+        }
+
+        if (!Configuration.EnableQuestChains)
+        {
+            Configuration.EnableQuestChains = true;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            Configuration.Save();
+        }
+    }
+
     public void TriggerToastIconPreview()
     {
         try
@@ -505,6 +565,21 @@ public sealed class Plugin : IDalamudPlugin
     public string GetTitleSyncProviderLabel()
     {
         return TitleSyncService.GetProviderLabel();
+    }
+
+    public TitleSyncHealthSnapshot GetTitleSyncHealth()
+    {
+        return TitleSyncService.GetHealthSnapshot();
+    }
+
+    public IReadOnlyList<SyncedTitleRecord> GetSyncedTitleSnapshot(int maxCount = 32)
+    {
+        return TitleSyncService.GetSyncedTitleSnapshot(maxCount);
+    }
+
+    public IReadOnlyList<SyncedTitleLeaderboardEntry> GetRankedSyncedTitleSnapshot(int maxCount = 24)
+    {
+        return TitleSyncService.GetRankedSyncedTitleSnapshot(maxCount);
     }
 
     public bool TryRunCommandText(string commandText)

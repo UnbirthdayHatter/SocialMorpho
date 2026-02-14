@@ -7,8 +7,10 @@ public class QuestOfferDefinition
     public required string OfferId { get; init; }
     public required int CatalogVersion { get; init; }
     public required string PopupTitle { get; init; }
+    public string PopupSubLabel { get; init; } = string.Empty;
     public required string PopupDescription { get; init; }
     public required string ImageFileName { get; init; }
+    public bool IsBonusOffer { get; init; } = false;
 
     public required ulong QuestId { get; init; }
     public required string QuestTitle { get; init; }

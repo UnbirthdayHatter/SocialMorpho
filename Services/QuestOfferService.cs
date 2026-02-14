@@ -153,6 +153,46 @@ public class QuestOfferService : IDisposable
         this.plugin.Configuration.Save();
     }
 
+    public void TriggerBonusOfferPopup(BonusQuestOfferPayload payload)
+    {
+        if (payload == null)
+        {
+            return;
+        }
+
+        if (this.plugin.QuestManager.GetQuest(payload.QuestId) != null)
+        {
+            return;
+        }
+
+        var offerId = $"bonus_{payload.QuestId}_{DateTime.UtcNow:yyyyMMdd}";
+        if (this.plugin.Configuration.ProcessedQuestOfferIds.Contains(offerId, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var offer = new QuestOfferDefinition
+        {
+            OfferId = offerId,
+            CatalogVersion = CurrentCatalogVersion,
+            PopupSubLabel = "Bonus Quest",
+            PopupTitle = payload.QuestTitle,
+            PopupDescription = payload.QuestDescription,
+            ImageFileName = "Square.png",
+            QuestId = payload.QuestId,
+            QuestTitle = payload.QuestTitle,
+            QuestDescription = payload.QuestDescription,
+            QuestType = payload.QuestType,
+            GoalCount = payload.GoalCount,
+            TriggerPhrases = payload.TriggerPhrases.ToList(),
+            IsBonusOffer = true,
+        };
+
+        this.TryPlayPopupSound();
+        this.questOfferWindow.ShowOffer(offer, this.AcceptOffer, this.DeclineOffer);
+        this.pluginLog.Info($"Showing bonus quest offer popup: {offer.OfferId}");
+    }
+
     private void TryPlayPopupSound()
     {
         if (!this.plugin.Configuration.SoundEnabled)

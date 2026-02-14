@@ -11,6 +11,20 @@ public class QuestManager
 {
     private const ulong DailyQuestIdBase = 900000;
     private static readonly TimeSpan DuplicateChatDebounce = TimeSpan.FromSeconds(2);
+    private static readonly Dictionary<string, double> AntiCheeseTierMultipliers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Relaxed"] = 0.75d,
+        ["Balanced"] = 1.0d,
+        ["Strict"] = 1.75d,
+    };
+    private static readonly HashSet<string> HighRiskEvents = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "duty_completion",
+        "helping_hand",
+        "wonderous_friend",
+        "party_join",
+        "commendation",
+    };
     private static readonly Dictionary<string, TimeSpan> EventCooldowns = new(StringComparer.OrdinalIgnoreCase)
     {
         ["duty_completion"] = TimeSpan.FromSeconds(20),
@@ -95,6 +109,12 @@ public class QuestManager
         new DailySocialQuestTemplate("Wonderous Friend", "Join a duty with at least one player who has not cleared it yet", 1, new[] { "one or more party members have yet to complete this duty" }, new[] { "Party" }),
         new DailySocialQuestTemplate("Squad Goals", "Join a party", 1, new[] { "joined the party", "joins the party" }, new[] { "Party" }),
         new DailySocialQuestTemplate("Home Sweet Home", "Enter a housing district or estate", 1, new[] { "entered housing" }, new[] { "Solo", "RP" }),
+    };
+    private static readonly List<DailySocialQuestTemplate> DailyChainBonusTemplates = new()
+    {
+        new DailySocialQuestTemplate("Lantern Parade", "Have 5 different players use /cheer for you", 5, new[] { "cheers you on", "cheers for you" }, new[] { "Solo", "Party", "RP" }),
+        new DailySocialQuestTemplate("Hearts in Motion", "Have 5 different players use /dance with you", 5, new[] { "dances with you", "dances for you" }, new[] { "Party", "RP" }),
+        new DailySocialQuestTemplate("Circle of Friends", "Have 5 different players use /hug on you", 5, new[] { "hugs you" }, new[] { "Solo", "Party", "RP" }),
     };
 
     public QuestManager(Configuration configuration)
@@ -388,6 +408,8 @@ public class QuestManager
         }
 
         Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats, Configuration.SelectedStarterTitle);
+        var chainBonus = completedNow ? TryProgressDailyChainAndOfferBonus(quest, now) : null;
+        var bonusOffer = chainBonus != null ? ToBonusOfferPayload(chainBonus) : null;
         if (!string.IsNullOrWhiteSpace(trackedEvent))
         {
             MarkEventSeen(trackedEvent, now);
@@ -403,6 +425,8 @@ public class QuestManager
             NewCount = quest.CurrentCount,
             GoalCount = quest.GoalCount,
             CompletedNow = completedNow,
+            ChainBonusQuestTitle = chainBonus?.Title,
+            BonusOffer = bonusOffer,
         };
     }
 
@@ -458,6 +482,8 @@ public class QuestManager
         }
 
         Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats, Configuration.SelectedStarterTitle);
+        var chainBonus = completedNow ? TryProgressDailyChainAndOfferBonus(quest, now) : null;
+        var bonusOffer = chainBonus != null ? ToBonusOfferPayload(chainBonus) : null;
         Configuration.Save();
         return new ProgressUpdateResult
         {
@@ -468,6 +494,8 @@ public class QuestManager
             NewCount = quest.CurrentCount,
             GoalCount = quest.GoalCount,
             CompletedNow = completedNow,
+            ChainBonusQuestTitle = chainBonus?.Title,
+            BonusOffer = bonusOffer,
         };
     }
 
@@ -914,9 +942,10 @@ public class QuestManager
 
     private bool IsEventOnCooldown(string eventKey, DateTime now)
     {
-        var cooldown = EventCooldowns.TryGetValue(eventKey, out var specific)
+        var baseCooldown = EventCooldowns.TryGetValue(eventKey, out var specific)
             ? specific
             : TimeSpan.FromSeconds(2);
+        var cooldown = ApplyAntiCheeseTier(baseCooldown, eventKey);
 
         if (this.lastEventSeenUtc.TryGetValue(eventKey, out var last) &&
             now - last <= cooldown)
@@ -925,6 +954,105 @@ public class QuestManager
         }
 
         return false;
+    }
+
+    private TimeSpan ApplyAntiCheeseTier(TimeSpan baseCooldown, string eventKey)
+    {
+        var tier = string.IsNullOrWhiteSpace(this.Configuration.AntiCheeseTier) ? "Balanced" : this.Configuration.AntiCheeseTier;
+        if (!AntiCheeseTierMultipliers.TryGetValue(tier, out var multiplier))
+        {
+            multiplier = 1.0d;
+        }
+
+        if (string.Equals(tier, "Strict", StringComparison.OrdinalIgnoreCase) &&
+            HighRiskEvents.Contains(eventKey))
+        {
+            multiplier *= 1.35d;
+        }
+
+        var seconds = Math.Max(1d, baseCooldown.TotalSeconds * multiplier);
+        return TimeSpan.FromSeconds(seconds);
+    }
+
+    private QuestData? TryProgressDailyChainAndOfferBonus(QuestData completedQuest, DateTime now)
+    {
+        if (!this.Configuration.EnableQuestChains)
+        {
+            return null;
+        }
+
+        if (!this.Configuration.CurrentDailyQuestIds.Contains(completedQuest.Id))
+        {
+            return null;
+        }
+
+        if (this.Configuration.LastDailyChainDate?.Date != now.Date)
+        {
+            this.Configuration.LastDailyChainDate = now.Date;
+            this.Configuration.DailyChainCompletions = 0;
+        }
+
+        this.Configuration.DailyChainCompletions = Math.Min(3, this.Configuration.DailyChainCompletions + 1);
+        if (this.Configuration.DailyChainCompletions < 3)
+        {
+            return null;
+        }
+
+        var existingBonus = this.Configuration.SavedQuests.FirstOrDefault(q =>
+            q.ResetSchedule == ResetSchedule.Daily &&
+            q.Type == QuestType.Custom &&
+            q.Id >= 950000 &&
+            q.Id < 960000 &&
+            !q.Completed);
+        if (existingBonus != null)
+        {
+            return existingBonus;
+        }
+
+        var preset = string.IsNullOrWhiteSpace(this.Configuration.ActiveQuestPreset) ? "Solo" : this.Configuration.ActiveQuestPreset;
+        var pool = DailyChainBonusTemplates
+            .Where(t => t.Presets.Contains(preset, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        if (pool.Count == 0)
+        {
+            pool = DailyChainBonusTemplates.ToList();
+        }
+
+        var template = pool[Random.Shared.Next(pool.Count)];
+        var questId = 950000UL + (ulong)Math.Abs(now.Date.GetHashCode() % 1000);
+        while (this.Configuration.SavedQuests.Any(q => q.Id == questId))
+        {
+            questId++;
+        }
+
+        var quest = new QuestData
+        {
+            Id = questId,
+            Title = template.Title,
+            Description = template.Description,
+            Type = QuestType.Custom,
+            GoalCount = template.GoalCount,
+            CurrentCount = 0,
+            Completed = false,
+            CreatedAt = now,
+            ResetSchedule = ResetSchedule.Daily,
+            LastResetDate = now,
+            TriggerPhrases = template.TriggerPhrases.ToList(),
+        };
+        return quest;
+    }
+
+    private static BonusQuestOfferPayload ToBonusOfferPayload(QuestData quest)
+    {
+        return new BonusQuestOfferPayload
+        {
+            QuestId = quest.Id,
+            QuestTitle = quest.Title,
+            QuestDescription = quest.Description,
+            QuestType = quest.Type,
+            GoalCount = quest.GoalCount,
+            TriggerPhrases = quest.TriggerPhrases.ToList(),
+        };
     }
 
     private void MarkEventSeen(string eventKey, DateTime now)

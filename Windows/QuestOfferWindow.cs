@@ -91,7 +91,9 @@ public class QuestOfferWindow : Window, IDisposable
 
         // Overlay title, text and buttons aligned to the frame's designed content areas.
         var titleText = this.currentOffer?.PopupTitle ?? string.Empty;
+        var subLabel = this.currentOffer?.PopupSubLabel ?? string.Empty;
         const float titleScale = 1.95f;
+        const float subLabelScale = 1.10f;
         const float descHeaderScale = 1.15f;
         const float descBodyScale = 1.28f;
 
@@ -99,6 +101,13 @@ public class QuestOfferWindow : Window, IDisposable
         var titleX = frameStart.X + ((frameSize.X - titleSize.X) * 0.5f);
         var titleY = frameStart.Y + (frameSize.Y * 0.158f);
         var blackTextVec = new Vector4(0.10f, 0.10f, 0.10f, 1f);
+        if (!string.IsNullOrWhiteSpace(subLabel))
+        {
+            var subSize = ImGui.CalcTextSize(subLabel) * subLabelScale;
+            var subX = frameStart.X + ((frameSize.X - subSize.X) * 0.5f);
+            var subY = frameStart.Y + (frameSize.Y * 0.122f);
+            this.DrawScaledText(subLabel, new Vector2(subX, subY), new Vector4(0.42f, 0.28f, 0.12f, 1f), subLabelScale);
+        }
         this.DrawScaledText(titleText, new Vector2(titleX, titleY), blackTextVec, titleScale);
 
         var textLeft = frameStart.X + (frameSize.X * 0.10f);

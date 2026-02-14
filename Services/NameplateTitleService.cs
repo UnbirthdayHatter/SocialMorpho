@@ -44,7 +44,7 @@ public sealed class NameplateTitleService : IDisposable
             if (handler.GameObjectId == localId && localEnabled)
             {
                 title = this.plugin.Configuration.Stats.UnlockedTitle;
-                colorPreset = this.plugin.Configuration.RewardTitleColorPreset;
+                colorPreset = ResolveLocalColorPreset(title);
             }
             else if (syncEnabled &&
                      this.titleSyncService.TryGetSyncedForGameObjectId(handler.GameObjectId, out var remote) &&
@@ -250,6 +250,23 @@ public sealed class NameplateTitleService : IDisposable
         };
 
         return ToAbgr((byte)MathF.Round(r * 255f), (byte)MathF.Round(g * 255f), (byte)MathF.Round(b * 255f));
+    }
+
+    private string ResolveLocalColorPreset(string title)
+    {
+        var fallback = this.plugin.Configuration.RewardTitleColorPreset;
+        if (!this.plugin.Configuration.EnablePerTitleStyleProfiles || string.IsNullOrWhiteSpace(title))
+        {
+            return fallback;
+        }
+
+        if (this.plugin.Configuration.TitleStyleProfiles.TryGetValue(title.Trim(), out var mapped) &&
+            !string.IsNullOrWhiteSpace(mapped))
+        {
+            return mapped;
+        }
+
+        return fallback;
     }
 
     private static string? NormalizeDisplayTitle(string rawTitle)
