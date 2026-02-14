@@ -829,19 +829,37 @@ public sealed class TitleSyncService : IDisposable
     private static string EncodeTitleForHonorific(string title, string colorPreset)
     {
         var cleanTitle = StripWrappingQuotes(title);
-        var cleanPreset = Regex.Replace(colorPreset ?? "Gold", "[^A-Za-z0-9 _-]", string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(cleanPreset))
+        var styleCode = GetStyleCode(colorPreset);
+        var encoded = $"{cleanTitle} ~{styleCode}";
+
+        // Honorific title hard cap is 32 characters.
+        const int maxTitleLength = 32;
+        if (encoded.Length <= maxTitleLength)
         {
-            cleanPreset = "Gold";
+            return encoded;
         }
 
-        return $"{cleanTitle} [[SMC:{cleanPreset}]]";
+        var available = Math.Max(1, maxTitleLength - (styleCode.Length + 2));
+        if (cleanTitle.Length > available)
+        {
+            cleanTitle = cleanTitle[..available].TrimEnd();
+        }
+
+        return $"{cleanTitle} ~{styleCode}";
     }
 
     private static string DecodeTitleFromHonorific(string input, out string colorPreset)
     {
         colorPreset = "Gold";
         var trimmed = StripWrappingQuotes(input.Trim());
+        var shortMatch = Regex.Match(trimmed, @"\s*~(?<code>[A-Za-z0-9]{1,3})\s*$", RegexOptions.CultureInvariant);
+        if (shortMatch.Success)
+        {
+            var code = shortMatch.Groups["code"].Value.Trim().ToUpperInvariant();
+            colorPreset = GetStyleFromCode(code);
+            return StripWrappingQuotes(trimmed[..shortMatch.Index].Trim());
+        }
+
         var match = Regex.Match(trimmed, @"\s*\[\[SMC:(?<preset>[^\]]+)\]\]\s*$", RegexOptions.CultureInvariant);
         if (!match.Success)
         {
@@ -870,6 +888,58 @@ public sealed class TitleSyncService : IDisposable
         }
 
         return result;
+    }
+
+    private static string GetStyleCode(string? preset)
+    {
+        return (preset ?? "Gold").Trim() switch
+        {
+            "Gold" => "G",
+            "Pink" => "P",
+            "Cyan" => "C",
+            "Rose" => "R",
+            "Mint" => "M",
+            "Violet" => "V",
+            "Gold Glow" => "GG",
+            "Pink Glow" => "PG",
+            "Cyan Glow" => "CG",
+            "Rose Glow" => "RG",
+            "Mint Glow" => "MG",
+            "Violet Glow" => "VG",
+            "White Glow" => "WG",
+            "Gold Gradient" => "GD",
+            "Rose Gradient" => "RD",
+            "Cyan Gradient" => "CD",
+            "Violet Gradient" => "VD",
+            "Rainbow Gradient" => "RB",
+            _ => "G",
+        };
+    }
+
+    private static string GetStyleFromCode(string? code)
+    {
+        return (code ?? "G").Trim().ToUpperInvariant() switch
+        {
+            "G" => "Gold",
+            "P" => "Pink",
+            "C" => "Cyan",
+            "R" => "Rose",
+            "M" => "Mint",
+            "V" => "Violet",
+            "GG" => "Gold Glow",
+            "PG" => "Pink Glow",
+            "CG" => "Cyan Glow",
+            "RG" => "Rose Glow",
+            "MG" => "Mint Glow",
+            "VG" => "Violet Glow",
+            "WG" => "White Glow",
+            "GD" => "Gold Gradient",
+            "RD" => "Rose Gradient",
+            "CD" => "Cyan Gradient",
+            "VD" => "Violet Gradient",
+            "RB" => "Rainbow Gradient",
+            _ => "Gold",
+        };
     }
 
     private async Task PushLocalTitleAsync()
