@@ -190,6 +190,7 @@ public sealed class NameplateTitleService : IDisposable
         // FFXIV-style readable edge with accent text.
         // Nameplate packed colors use ABGR ordering.
         var edge = ToAbgr(0x10, 0x10, 0x10);
+        var gradientPulse = (MathF.Sin((float)(DateTime.UtcNow.TimeOfDay.TotalSeconds * 2.25f)) + 1f) * 0.5f;
         return preset switch
         {
             "Pink" => (ToAbgr(0xF0, 0x8B, 0xBB), edge),
@@ -197,6 +198,11 @@ public sealed class NameplateTitleService : IDisposable
             "Rose" => (ToAbgr(0xF6, 0x9A, 0x9A), edge),
             "Mint" => (ToAbgr(0xA0, 0xF2, 0xC8), edge),
             "Violet" => (ToAbgr(0x8D, 0xA9, 0xE8), edge),
+            "Gold Gradient" => (BlendToAbgr(0xE5, 0xC3, 0x83, 0xFF, 0xEE, 0xB8, gradientPulse), ToAbgr(0x2E, 0x24, 0x12)),
+            "Rose Gradient" => (BlendToAbgr(0xF6, 0x9A, 0x9A, 0xFF, 0xC4, 0xDA, gradientPulse), ToAbgr(0x3A, 0x20, 0x2D)),
+            "Cyan Gradient" => (BlendToAbgr(0x78, 0xD6, 0xFF, 0xB8, 0xF2, 0xFF, gradientPulse), ToAbgr(0x1B, 0x33, 0x3B)),
+            "Violet Gradient" => (BlendToAbgr(0x8D, 0xA9, 0xE8, 0xC0, 0xB4, 0xFF, gradientPulse), ToAbgr(0x2A, 0x21, 0x40)),
+            "Rainbow Gradient" => (RainbowToAbgr(gradientPulse), ToAbgr(0x24, 0x24, 0x24)),
             "Gold Glow" => (ToAbgr(0xE5, 0xC3, 0x83), ToAbgr(0x3C, 0x2F, 0x15)),
             "Pink Glow" => (ToAbgr(0xF0, 0x8B, 0xBB), ToAbgr(0x3A, 0x1C, 0x39)),
             "Cyan Glow" => (ToAbgr(0x78, 0xD6, 0xFF), ToAbgr(0x1A, 0x3A, 0x3A)),
@@ -211,6 +217,39 @@ public sealed class NameplateTitleService : IDisposable
     private static uint ToAbgr(byte r, byte g, byte b)
     {
         return 0xFF000000u | ((uint)b << 16) | ((uint)g << 8) | r;
+    }
+
+    private static uint BlendToAbgr(byte r1, byte g1, byte b1, byte r2, byte g2, byte b2, float t)
+    {
+        var clamped = Math.Clamp(t, 0f, 1f);
+        var r = (byte)MathF.Round((r1 * (1f - clamped)) + (r2 * clamped));
+        var g = (byte)MathF.Round((g1 * (1f - clamped)) + (g2 * clamped));
+        var b = (byte)MathF.Round((b1 * (1f - clamped)) + (b2 * clamped));
+        return ToAbgr(r, g, b);
+    }
+
+    private static uint RainbowToAbgr(float t)
+    {
+        var h = Math.Clamp(t, 0f, 1f) * 6f;
+        var i = (int)MathF.Floor(h);
+        var f = h - i;
+        const float v = 1f;
+        const float s = 0.55f;
+        var p = v * (1f - s);
+        var q = v * (1f - f * s);
+        var u = v * (1f - (1f - f) * s);
+
+        (float r, float g, float b) = (i % 6) switch
+        {
+            0 => (v, u, p),
+            1 => (q, v, p),
+            2 => (p, v, u),
+            3 => (p, q, v),
+            4 => (u, p, v),
+            _ => (v, p, q),
+        };
+
+        return ToAbgr((byte)MathF.Round(r * 255f), (byte)MathF.Round(g * 255f), (byte)MathF.Round(b * 255f));
     }
 
     private static string? NormalizeDisplayTitle(string rawTitle)
