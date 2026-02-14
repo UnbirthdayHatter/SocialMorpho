@@ -280,34 +280,48 @@ public sealed class TitleSyncService : IDisposable
         value = default!;
         try
         {
-            var method = this.plugin.PluginInterface.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .FirstOrDefault(m => string.Equals(m.Name, "GetIpcSubscriber", StringComparison.Ordinal) &&
-                                     m.IsGenericMethodDefinition &&
-                                     m.GetParameters().Length == 1 &&
-                                     m.GetParameters()[0].ParameterType == typeof(string));
-            if (method == null)
+            var methods = this.plugin.PluginInterface.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => string.Equals(m.Name, "GetIpcSubscriber", StringComparison.Ordinal) &&
+                            m.IsGenericMethodDefinition &&
+                            m.GetGenericArguments().Length == 1 &&
+                            m.GetParameters().Length == 1 &&
+                            m.GetParameters()[0].ParameterType == typeof(string))
+                .ToArray();
+            if (methods.Length == 0)
             {
                 return false;
             }
 
-            var generic = method.MakeGenericMethod(typeof(TReturn));
-            var subscriber = generic.Invoke(this.plugin.PluginInterface, [callGateName]);
-            if (subscriber == null)
+            foreach (var method in methods)
             {
-                return false;
-            }
+                object? subscriber = null;
+                try
+                {
+                    var generic = method.MakeGenericMethod(typeof(TReturn));
+                    subscriber = generic.Invoke(this.plugin.PluginInterface, [callGateName]);
+                }
+                catch
+                {
+                    continue;
+                }
 
-            var invokeFunc = subscriber.GetType().GetMethod("InvokeFunc", BindingFlags.Public | BindingFlags.Instance);
-            if (invokeFunc == null)
-            {
-                return false;
-            }
+                if (subscriber == null)
+                {
+                    continue;
+                }
 
-            var result = invokeFunc.Invoke(subscriber, null);
-            if (result is TReturn typed)
-            {
-                value = typed;
-                return true;
+                var invokeFunc = subscriber.GetType().GetMethod("InvokeFunc", BindingFlags.Public | BindingFlags.Instance);
+                if (invokeFunc == null)
+                {
+                    continue;
+                }
+
+                var result = invokeFunc.Invoke(subscriber, null);
+                if (result is TReturn typed)
+                {
+                    value = typed;
+                    return true;
+                }
             }
 
             return false;
