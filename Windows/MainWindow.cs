@@ -199,6 +199,7 @@ public class MainWindow : Window, IDisposable
         bool showQuestTrackerOnLogin = Plugin.Configuration.ShowQuestTrackerOnLogin;
         bool showLoginNotification = Plugin.Configuration.ShowLoginNotification;
         bool showRewardTitleOnNameplate = Plugin.Configuration.ShowRewardTitleOnNameplate;
+        bool forceSocialMorphoTitleColors = Plugin.Configuration.ForceSocialMorphoTitleColors;
         bool enableTitleSync = Plugin.Configuration.EnableTitleSync;
         bool shareTitleSync = Plugin.Configuration.ShareTitleSync;
         bool showSyncedTitles = Plugin.Configuration.ShowSyncedTitles;
@@ -310,6 +311,13 @@ public class MainWindow : Window, IDisposable
                 if (ImGui.Checkbox("Show Reward Title Above Name", ref showRewardTitleOnNameplate))
                 {
                     Plugin.Configuration.ShowRewardTitleOnNameplate = showRewardTitleOnNameplate;
+                    Plugin.Configuration.Save();
+                    Plugin.RefreshNameplateTitlePreview();
+                }
+
+                if (ImGui.Checkbox("Force SocialMorpho Title Colors", ref forceSocialMorphoTitleColors))
+                {
+                    Plugin.Configuration.ForceSocialMorphoTitleColors = forceSocialMorphoTitleColors;
                     Plugin.Configuration.Save();
                     Plugin.RefreshNameplateTitlePreview();
                 }

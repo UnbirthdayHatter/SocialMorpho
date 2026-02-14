@@ -89,7 +89,7 @@ public sealed class NameplateTitleService : IDisposable
                 handler.DisplayTitle = true;
                 handler.IsPrefixTitle = true;
                 handler.SetField(NamePlateStringField.Title, prefixedTitle);
-                TrySetTitleOnlyColors(handler, textColor, edgeColor);
+                TrySetTitleOnlyColors(handler, textColor, edgeColor, this.plugin.Configuration.ForceSocialMorphoTitleColors);
             }
             catch (Exception ex)
             {
@@ -141,7 +141,7 @@ public sealed class NameplateTitleService : IDisposable
         return false;
     }
 
-    private static void TrySetTitleOnlyColors(INamePlateUpdateHandler handler, uint textColor, uint edgeColor)
+    private static void TrySetTitleOnlyColors(INamePlateUpdateHandler handler, uint textColor, uint edgeColor, bool forceOverride)
     {
         // Avoid touching handler.TextColor/EdgeColor (that can tint player name text).
         // Use title-specific fields only when available in current Dalamud build.
@@ -149,6 +149,17 @@ public sealed class NameplateTitleService : IDisposable
         TrySetProperty(handler, "TitleEdgeColor", edgeColor);
         TrySetProperty(handler, "PrefixTextColor", textColor);
         TrySetProperty(handler, "PrefixEdgeColor", edgeColor);
+
+        if (!forceOverride)
+        {
+            return;
+        }
+
+        // Some plugins/styles paint through alternate fields; force-write common fallbacks.
+        TrySetProperty(handler, "Color", textColor);
+        TrySetProperty(handler, "EdgeColor", edgeColor);
+        TrySetProperty(handler, "NameTextColor", textColor);
+        TrySetProperty(handler, "NameEdgeColor", edgeColor);
     }
 
     private static void TrySetProperty(object target, string propertyName, uint value)
