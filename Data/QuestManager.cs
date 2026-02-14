@@ -10,6 +10,8 @@ namespace SocialMorpho.Data;
 public class QuestManager
 {
     private const ulong DailyQuestIdBase = 900000;
+    private const string ValentioneSeasonId = "valentione";
+    private const string ValentioneRewardTitle = "Rosebound Courier";
     private static readonly TimeSpan DuplicateChatDebounce = TimeSpan.FromSeconds(2);
     private static readonly Dictionary<string, double> AntiCheeseTierMultipliers = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -82,11 +84,20 @@ public class QuestManager
         new SecretTitleTier("Take a Chance On Me", "wonderous_friend", 100),
         new SecretTitleTier("Party Animal", "party_join", 200),
     };
+    private static readonly List<ReputationTier> ReputationTiers = new()
+    {
+        new ReputationTier("Companion", 0, "Companion of Hearts", "Companion Gradient"),
+        new ReputationTier("Confidant", 160, "Trusted Confidant", "Confidant Gradient"),
+        new ReputationTier("Muse", 420, "Midnight Muse", "Muse Gradient"),
+        new ReputationTier("Heartbound", 820, "Heartbound Legend", "Heartbound Gradient"),
+    };
 
     private readonly Configuration Configuration;
     private readonly Dictionary<ulong, QuestProgress> QuestProgress = new();
     private readonly Dictionary<string, DateTime> lastEventSeenUtc = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DateTime> lastChatSeenUtc = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Queue<DateTime>> recentEventWindowsUtc = new(StringComparer.OrdinalIgnoreCase);
+    private string lastAntiCheeseStatus = "No anti-cheese blocks yet.";
     private static readonly List<DailySocialQuestTemplate> DailySocialQuestTemplates = new()
     {
         new DailySocialQuestTemplate("Sweet on You", "Have 3 different players use /dote on you", 3, new[] { "dotes on you", "dotes you" }, new[] { "Solo", "Party", "RP" }),
@@ -103,12 +114,15 @@ public class QuestManager
         new DailySocialQuestTemplate("Four Eyes Club", "Have 3 different players use /spectacles at you", 3, new[] { "adjusts their spectacles" }, new[] { "RP" }),
         new DailySocialQuestTemplate("Encore Please", "Have 3 different players use /cheer for you", 3, new[] { "cheers you on", "cheers for you" }, new[] { "Party" }),
         new DailySocialQuestTemplate("Polite Company", "Have 3 different players use /bow to you", 3, new[] { "bows to you" }, new[] { "RP" }),
-        new DailySocialQuestTemplate("Fond Memories", "Receive 1 player commendation", 1, new[] { "commendation", "player commendation" }, new[] { "Solo", "Party", "RP" }),
-        new DailySocialQuestTemplate("Duty Roulette", "Complete any duty", 1, new[] { "completion time" }, new[] { "Party" }),
-        new DailySocialQuestTemplate("Helping Hand", "Help a first-timer clear a duty", 1, new[] { "one or more party members completed this duty for the first time" }, new[] { "Party" }),
-        new DailySocialQuestTemplate("Wonderous Friend", "Join a duty with at least one player who has not cleared it yet", 1, new[] { "one or more party members have yet to complete this duty" }, new[] { "Party" }),
-        new DailySocialQuestTemplate("Squad Goals", "Join a party", 1, new[] { "joined the party", "joins the party" }, new[] { "Party" }),
+        new DailySocialQuestTemplate("Fond Memories", "Receive 1 player commendation", 1, new[] { "commendation", "player commendation" }, new[] { "Solo", "Party", "RP" }, AntiCheeseRisk.High),
+        new DailySocialQuestTemplate("Duty Roulette", "Complete any duty", 1, new[] { "completion time" }, new[] { "Party" }, AntiCheeseRisk.High),
+        new DailySocialQuestTemplate("Helping Hand", "Help a first-timer clear a duty", 1, new[] { "one or more party members completed this duty for the first time" }, new[] { "Party" }, AntiCheeseRisk.High),
+        new DailySocialQuestTemplate("Wonderous Friend", "Join a duty with at least one player who has not cleared it yet", 1, new[] { "one or more party members have yet to complete this duty" }, new[] { "Party" }, AntiCheeseRisk.High),
+        new DailySocialQuestTemplate("Squad Goals", "Join a party", 1, new[] { "joined the party", "joins the party" }, new[] { "Party" }, AntiCheeseRisk.High),
         new DailySocialQuestTemplate("Home Sweet Home", "Enter a housing district or estate", 1, new[] { "entered housing" }, new[] { "Solo", "RP" }),
+        new DailySocialQuestTemplate("Paired Promenade", "Have your duo partner use /wave to you 3 times", 3, new[] { "waves to you" }, new[] { "Party", "RP" }, AntiCheeseRisk.Medium, true),
+        new DailySocialQuestTemplate("Twin Hearts", "Have your duo partner use /dote on you 3 times", 3, new[] { "dotes on you", "dotes you" }, new[] { "Party", "RP" }, AntiCheeseRisk.Medium, true),
+        new DailySocialQuestTemplate("Harmony Step", "Have your duo partner use /dance with you 3 times", 3, new[] { "dances with you", "dances for you" }, new[] { "Party", "RP" }, AntiCheeseRisk.Medium, true),
     };
     private static readonly List<DailySocialQuestTemplate> DailyChainBonusTemplates = new()
     {
@@ -181,6 +195,7 @@ public class QuestManager
             quest.Completed = true;
             quest.CompletedAt = now;
             RegisterCompletion(now);
+            AwardReputationXp(quest, true);
             if (Configuration.CurrentDailyQuestIds.Contains(quest.Id))
             {
                 ReplaceCompletedDailyQuest(quest.Id, now);
@@ -343,6 +358,11 @@ public class QuestManager
 
     public ProgressUpdateResult? IncrementQuestProgressFromChatDetailed(string chatText)
     {
+        return IncrementQuestProgressFromChatDetailed(chatText, string.Empty);
+    }
+
+    public ProgressUpdateResult? IncrementQuestProgressFromChatDetailed(string chatText, string senderText)
+    {
         if (string.IsNullOrWhiteSpace(chatText))
         {
             return null;
@@ -353,14 +373,32 @@ public class QuestManager
 
         var normalized = chatText.Trim();
         var normalizedLower = normalized.ToLowerInvariant();
+        var senderLower = (senderText ?? string.Empty).Trim().ToLowerInvariant();
         if (IsDuplicateChatLine(normalizedLower, now))
         {
             return null;
         }
 
+        var quest = Configuration.SavedQuests.FirstOrDefault(q =>
+            !q.Completed &&
+            IsQuestTriggeredByChat(
+                q,
+                normalized,
+                normalizedLower,
+                senderLower,
+                Configuration.DuoPartnerName,
+                Configuration.EnableDuoSynergy));
         var trackedEvent = DetectTrackedEvent(normalizedLower);
-        if (!string.IsNullOrWhiteSpace(trackedEvent) && IsEventOnCooldown(trackedEvent, now))
+        var riskClass = quest?.AntiCheeseRisk ?? InferRiskFromEvent(trackedEvent);
+        if (!string.IsNullOrWhiteSpace(trackedEvent) && IsEventOnCooldown(trackedEvent, now, riskClass))
         {
+            this.lastAntiCheeseStatus = $"Cooldown blocked '{trackedEvent}' at {now:HH:mm:ss} ({riskClass}).";
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(trackedEvent) && IsLikelySpamBurst(trackedEvent, now, riskClass))
+        {
+            this.lastAntiCheeseStatus = $"Spam burst blocked '{trackedEvent}' at {now:HH:mm:ss} ({riskClass}).";
             return null;
         }
 
@@ -369,10 +407,6 @@ public class QuestManager
         {
             tracked = TrackActivityEvent(trackedEvent);
         }
-
-        var quest = Configuration.SavedQuests.FirstOrDefault(q =>
-            !q.Completed &&
-            IsQuestTriggeredByChat(q, normalized, normalizedLower));
 
         if (quest == null)
         {
@@ -400,11 +434,17 @@ public class QuestManager
             quest.CompletedAt = now;
             RegisterCompletion(now);
             completedNow = true;
+            AwardReputationXp(quest, completedNow);
 
             if (Configuration.CurrentDailyQuestIds.Contains(quest.Id))
             {
                 ReplaceCompletedDailyQuest(quest.Id, now);
             }
+        }
+
+        if (completedNow)
+        {
+            TryUnlockSeasonalRewards(quest.SeasonId);
         }
 
         Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats, Configuration.SelectedStarterTitle);
@@ -413,6 +453,7 @@ public class QuestManager
         if (!string.IsNullOrWhiteSpace(trackedEvent))
         {
             MarkEventSeen(trackedEvent, now);
+            this.lastAntiCheeseStatus = $"Accepted '{trackedEvent}' at {now:HH:mm:ss} ({riskClass}).";
         }
 
         Configuration.Save();
@@ -438,19 +479,35 @@ public class QuestManager
         }
 
         var now = DateTime.Now;
-        if (IsEventOnCooldown(eventKey, now))
+        var normalized = fallbackQuestText?.Trim() ?? string.Empty;
+        var normalizedLower = normalized.ToLowerInvariant();
+        var senderLower = string.Empty;
+        var quest = Configuration.SavedQuests.FirstOrDefault(q =>
+            !q.Completed &&
+            IsQuestTriggeredByChat(
+                q,
+                normalized,
+                normalizedLower,
+                senderLower,
+                Configuration.DuoPartnerName,
+                Configuration.EnableDuoSynergy));
+        var riskClass = quest?.AntiCheeseRisk ?? InferRiskFromEvent(eventKey);
+        if (IsEventOnCooldown(eventKey, now, riskClass))
         {
+            this.lastAntiCheeseStatus = $"Cooldown blocked '{eventKey}' at {now:HH:mm:ss} ({riskClass}).";
+            return null;
+        }
+
+        if (IsLikelySpamBurst(eventKey, now, riskClass))
+        {
+            this.lastAntiCheeseStatus = $"Spam burst blocked '{eventKey}' at {now:HH:mm:ss} ({riskClass}).";
             return null;
         }
 
         TrackActivityEvent(eventKey);
         MarkEventSeen(eventKey, now);
+        this.lastAntiCheeseStatus = $"Accepted '{eventKey}' at {now:HH:mm:ss} ({riskClass}).";
 
-        var normalized = fallbackQuestText?.Trim() ?? string.Empty;
-        var normalizedLower = normalized.ToLowerInvariant();
-        var quest = Configuration.SavedQuests.FirstOrDefault(q =>
-            !q.Completed &&
-            IsQuestTriggeredByChat(q, normalized, normalizedLower));
         if (quest == null)
         {
             Configuration.Save();
@@ -474,11 +531,17 @@ public class QuestManager
             quest.CompletedAt = now;
             RegisterCompletion(now);
             completedNow = true;
+            AwardReputationXp(quest, completedNow);
 
             if (Configuration.CurrentDailyQuestIds.Contains(quest.Id))
             {
                 ReplaceCompletedDailyQuest(quest.Id, now);
             }
+        }
+
+        if (completedNow)
+        {
+            TryUnlockSeasonalRewards(quest.SeasonId);
         }
 
         Configuration.Stats.UnlockedTitle = GetUnlockedTitle(Configuration.Stats, Configuration.SelectedStarterTitle);
@@ -499,8 +562,21 @@ public class QuestManager
         };
     }
 
-    private static bool IsQuestTriggeredByChat(QuestData quest, string chatText, string chatLower)
+    private static bool IsQuestTriggeredByChat(QuestData quest, string chatText, string chatLower, string senderLower, string duoPartnerName, bool duoEnabled)
     {
+        if (quest.RequiresDuoPartner)
+        {
+            if (!duoEnabled || string.IsNullOrWhiteSpace(duoPartnerName))
+            {
+                return false;
+            }
+
+            if (!IsDuoPartnerMatch(chatLower, senderLower, duoPartnerName))
+            {
+                return false;
+            }
+        }
+
         // Exact phrase support (existing behavior).
         if (quest.TriggerPhrases.Any(p => chatText.Contains(p, StringComparison.OrdinalIgnoreCase)))
         {
@@ -569,6 +645,29 @@ public class QuestManager
         return false;
     }
 
+    private static bool IsDuoPartnerMatch(string chatLower, string senderLower, string duoPartnerName)
+    {
+        var partner = duoPartnerName.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(partner))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(senderLower) && senderLower.Contains(partner, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (chatLower.Contains(partner + " ", StringComparison.Ordinal) ||
+            chatLower.Contains(partner + "'", StringComparison.Ordinal) ||
+            chatLower.StartsWith(partner + " ", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     public void EnsureDailySocialQuests(DateTime now)
     {
         RefreshDailyQuestTitles();
@@ -603,6 +702,7 @@ public class QuestManager
         var rng = new Random(now.Date.GetHashCode());
         var pool = DailySocialQuestTemplates
             .Where(t => t.Presets.Contains(preset, StringComparer.OrdinalIgnoreCase))
+            .Where(t => !t.RequiresDuoPartner || (Configuration.EnableDuoSynergy && !string.IsNullOrWhiteSpace(Configuration.DuoPartnerName)))
             .ToList();
         if (pool.Count < 3)
         {
@@ -634,6 +734,8 @@ public class QuestManager
                 ResetSchedule = ResetSchedule.Daily,
                 LastResetDate = now,
                 TriggerPhrases = template.TriggerPhrases.ToList(),
+                AntiCheeseRisk = template.RiskClass,
+                RequiresDuoPartner = template.RequiresDuoPartner,
             });
         }
 
@@ -653,6 +755,7 @@ public class QuestManager
         var preset = string.IsNullOrWhiteSpace(Configuration.ActiveQuestPreset) ? "Solo" : Configuration.ActiveQuestPreset;
         var pool = DailySocialQuestTemplates
             .Where(t => t.Presets.Contains(preset, StringComparer.OrdinalIgnoreCase))
+            .Where(t => !t.RequiresDuoPartner || (Configuration.EnableDuoSynergy && !string.IsNullOrWhiteSpace(Configuration.DuoPartnerName)))
             .ToList();
         if (pool.Count == 0)
         {
@@ -683,6 +786,8 @@ public class QuestManager
         quest.ResetSchedule = ResetSchedule.Daily;
         quest.LastResetDate = now;
         quest.TriggerPhrases = template.TriggerPhrases.ToList();
+        quest.AntiCheeseRisk = template.RiskClass;
+        quest.RequiresDuoPartner = template.RequiresDuoPartner;
     }
 
     public (bool success, string message) ExportQuestPack(string configDirectory)
@@ -770,6 +875,52 @@ public class QuestManager
     {
         EnsureStatsBuckets(DateTime.Now);
         return Configuration.Stats;
+    }
+
+    public string GetAntiCheeseStatus()
+    {
+        return this.lastAntiCheeseStatus;
+    }
+
+    public ReputationProgressInfo GetReputationProgress()
+    {
+        var xp = Math.Max(0, Configuration.Stats.ReputationXp);
+        var currentTier = ReputationTiers
+            .Where(t => xp >= t.RequiredXp)
+            .OrderByDescending(t => t.RequiredXp)
+            .FirstOrDefault() ?? ReputationTiers[0];
+
+        var nextTier = ReputationTiers
+            .Where(t => t.RequiredXp > xp)
+            .OrderBy(t => t.RequiredXp)
+            .FirstOrDefault();
+
+        if (nextTier == null)
+        {
+            return new ReputationProgressInfo
+            {
+                CurrentRank = currentTier.RankName,
+                NextRank = "Max rank reached",
+                CurrentXp = xp,
+                CurrentRankXpFloor = currentTier.RequiredXp,
+                NextRankXp = currentTier.RequiredXp,
+                RemainingToNext = 0,
+                NextRewardTitle = "All rewards unlocked",
+                NextRewardStyle = "All rewards unlocked",
+            };
+        }
+
+        return new ReputationProgressInfo
+        {
+            CurrentRank = currentTier.RankName,
+            NextRank = nextTier.RankName,
+            CurrentXp = xp,
+            CurrentRankXpFloor = currentTier.RequiredXp,
+            NextRankXp = nextTier.RequiredXp,
+            RemainingToNext = Math.Max(0, nextTier.RequiredXp - xp),
+            NextRewardTitle = nextTier.RewardTitle,
+            NextRewardStyle = nextTier.RewardStyle,
+        };
     }
 
     public TitleProgressInfo GetTitleProgress()
@@ -885,6 +1036,53 @@ public class QuestManager
             .ToList();
     }
 
+    private void AwardReputationXp(QuestData quest, bool completedNow)
+    {
+        if (!completedNow)
+        {
+            return;
+        }
+
+        var xp = quest.Type switch
+        {
+            QuestType.Custom => 18,
+            QuestType.Social => 14,
+            QuestType.Emote => 12,
+            QuestType.Buff => 10,
+            _ => 12,
+        };
+
+        if (!string.IsNullOrWhiteSpace(quest.SeasonId))
+        {
+            xp += 6;
+        }
+
+        if (quest.GoalCount >= 4)
+        {
+            xp += 4;
+        }
+
+        Configuration.Stats.ReputationXp = Math.Max(0, Configuration.Stats.ReputationXp + xp);
+        TryUnlockReputationRewards();
+    }
+
+    private void TryUnlockReputationRewards()
+    {
+        var xp = Math.Max(0, Configuration.Stats.ReputationXp);
+        foreach (var tier in ReputationTiers)
+        {
+            if (xp < tier.RequiredXp)
+            {
+                continue;
+            }
+
+            if (!Configuration.UnlockedReputationRewards.Contains(tier.RewardTitle, StringComparer.Ordinal))
+            {
+                Configuration.UnlockedReputationRewards.Add(tier.RewardTitle);
+            }
+        }
+    }
+
     private void EnsureStatsBuckets(DateTime now)
     {
         var stats = Configuration.Stats;
@@ -940,12 +1138,12 @@ public class QuestManager
         return false;
     }
 
-    private bool IsEventOnCooldown(string eventKey, DateTime now)
+    private bool IsEventOnCooldown(string eventKey, DateTime now, AntiCheeseRisk riskClass)
     {
         var baseCooldown = EventCooldowns.TryGetValue(eventKey, out var specific)
             ? specific
             : TimeSpan.FromSeconds(2);
-        var cooldown = ApplyAntiCheeseTier(baseCooldown, eventKey);
+        var cooldown = ApplyAntiCheeseTier(baseCooldown, eventKey, riskClass);
 
         if (this.lastEventSeenUtc.TryGetValue(eventKey, out var last) &&
             now - last <= cooldown)
@@ -956,7 +1154,7 @@ public class QuestManager
         return false;
     }
 
-    private TimeSpan ApplyAntiCheeseTier(TimeSpan baseCooldown, string eventKey)
+    private TimeSpan ApplyAntiCheeseTier(TimeSpan baseCooldown, string eventKey, AntiCheeseRisk riskClass)
     {
         var tier = string.IsNullOrWhiteSpace(this.Configuration.AntiCheeseTier) ? "Balanced" : this.Configuration.AntiCheeseTier;
         if (!AntiCheeseTierMultipliers.TryGetValue(tier, out var multiplier))
@@ -970,8 +1168,59 @@ public class QuestManager
             multiplier *= 1.35d;
         }
 
+        multiplier *= riskClass switch
+        {
+            AntiCheeseRisk.High => 1.60d,
+            AntiCheeseRisk.Medium => 1.20d,
+            _ => 1.0d,
+        };
+
         var seconds = Math.Max(1d, baseCooldown.TotalSeconds * multiplier);
         return TimeSpan.FromSeconds(seconds);
+    }
+
+    private bool IsLikelySpamBurst(string eventKey, DateTime now, AntiCheeseRisk riskClass)
+    {
+        if (!this.recentEventWindowsUtc.TryGetValue(eventKey, out var window))
+        {
+            window = new Queue<DateTime>();
+            this.recentEventWindowsUtc[eventKey] = window;
+        }
+
+        var lookback = TimeSpan.FromSeconds(20);
+        while (window.Count > 0 && now - window.Peek() > lookback)
+        {
+            window.Dequeue();
+        }
+
+        window.Enqueue(now);
+        var threshold = riskClass switch
+        {
+            AntiCheeseRisk.High => 2,
+            AntiCheeseRisk.Medium => 3,
+            _ => 4,
+        };
+
+        return window.Count >= threshold;
+    }
+
+    private static AntiCheeseRisk InferRiskFromEvent(string? eventKey)
+    {
+        if (string.IsNullOrWhiteSpace(eventKey))
+        {
+            return AntiCheeseRisk.Low;
+        }
+
+        if (HighRiskEvents.Contains(eventKey))
+        {
+            return AntiCheeseRisk.High;
+        }
+
+        return eventKey switch
+        {
+            "housing_entered" => AntiCheeseRisk.Medium,
+            _ => AntiCheeseRisk.Low,
+        };
     }
 
     private QuestData? TryProgressDailyChainAndOfferBonus(QuestData completedQuest, DateTime now)
@@ -1038,6 +1287,8 @@ public class QuestManager
             ResetSchedule = ResetSchedule.Daily,
             LastResetDate = now,
             TriggerPhrases = template.TriggerPhrases.ToList(),
+            AntiCheeseRisk = template.RiskClass,
+            RequiresDuoPartner = template.RequiresDuoPartner,
         };
         return quest;
     }
@@ -1101,7 +1352,7 @@ public class QuestManager
         return null;
     }
 
-    private static string GetUnlockedTitle(SocialStats stats, string selectedStarterTitle)
+    private string GetUnlockedTitle(SocialStats stats, string selectedStarterTitle)
     {
         foreach (var secret in SecretTitleTiers)
         {
@@ -1109,6 +1360,21 @@ public class QuestManager
             {
                 return secret.Title;
             }
+        }
+
+        if (IsSeasonActive(ValentioneSeasonId) &&
+            this.Configuration.UnlockedSeasonalTitles.Contains(ValentioneRewardTitle, StringComparer.Ordinal))
+        {
+            return ValentioneRewardTitle;
+        }
+
+        var reputationTitle = ReputationTiers
+            .OrderByDescending(t => t.RequiredXp)
+            .Select(t => t.RewardTitle)
+            .FirstOrDefault(t => this.Configuration.UnlockedReputationRewards.Contains(t, StringComparer.Ordinal));
+        if (!string.IsNullOrWhiteSpace(reputationTitle))
+        {
+            return reputationTitle;
         }
 
         var totalCompletions = stats.TotalCompletions;
@@ -1121,6 +1387,30 @@ public class QuestManager
         }
 
         return "New Adventurer";
+    }
+
+    private void TryUnlockSeasonalRewards(string? seasonId)
+    {
+        if (string.IsNullOrWhiteSpace(seasonId))
+        {
+            return;
+        }
+
+        if (string.Equals(seasonId, ValentioneSeasonId, StringComparison.OrdinalIgnoreCase) &&
+            !this.Configuration.UnlockedSeasonalTitles.Contains(ValentioneRewardTitle, StringComparer.Ordinal))
+        {
+            this.Configuration.UnlockedSeasonalTitles.Add(ValentioneRewardTitle);
+        }
+    }
+
+    private static bool IsSeasonActive(string seasonId)
+    {
+        var now = DateTime.Now;
+        return seasonId.ToLowerInvariant() switch
+        {
+            ValentioneSeasonId => now.Month == 2,
+            _ => false,
+        };
     }
 
     private static int GetEmoteCount(SocialStats stats, string emoteKey)
@@ -1215,13 +1505,15 @@ public class QuestFile
 
 public class DailySocialQuestTemplate
 {
-    public DailySocialQuestTemplate(string title, string description, int goalCount, IEnumerable<string> triggerPhrases, IEnumerable<string> presets)
+    public DailySocialQuestTemplate(string title, string description, int goalCount, IEnumerable<string> triggerPhrases, IEnumerable<string> presets, AntiCheeseRisk riskClass = AntiCheeseRisk.Medium, bool requiresDuoPartner = false)
     {
         Title = title;
         Description = description;
         GoalCount = goalCount;
         TriggerPhrases = triggerPhrases.ToArray();
         Presets = presets.ToArray();
+        RiskClass = riskClass;
+        RequiresDuoPartner = requiresDuoPartner;
     }
 
     public string Title { get; }
@@ -1229,6 +1521,8 @@ public class DailySocialQuestTemplate
     public int GoalCount { get; }
     public string[] TriggerPhrases { get; }
     public string[] Presets { get; }
+    public AntiCheeseRisk RiskClass { get; }
+    public bool RequiresDuoPartner { get; }
 }
 
 public class QuestPackFile
@@ -1236,4 +1530,20 @@ public class QuestPackFile
     public string Name { get; set; } = "SocialMorpho Quest Pack";
     public string ExportedAt { get; set; } = string.Empty;
     public List<QuestData> Quests { get; set; } = new();
+}
+
+public sealed class ReputationTier
+{
+    public ReputationTier(string rankName, int requiredXp, string rewardTitle, string rewardStyle)
+    {
+        RankName = rankName;
+        RequiredXp = requiredXp;
+        RewardTitle = rewardTitle;
+        RewardStyle = rewardStyle;
+    }
+
+    public string RankName { get; }
+    public int RequiredXp { get; }
+    public string RewardTitle { get; }
+    public string RewardStyle { get; }
 }

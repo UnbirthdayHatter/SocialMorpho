@@ -45,9 +45,11 @@ public sealed class Plugin : IDalamudPlugin
     private MainWindow MainWindow { get; init; }
     public QuestTrackerWindow QuestTrackerWindow { get; init; }
     private QuestOfferWindow QuestOfferWindow { get; init; }
+    private QuestBoardWindow QuestBoardWindow { get; init; }
     public QuestManager QuestManager { get; init; }
     private QuestNotificationService QuestNotificationService { get; init; }
     private QuestOfferService QuestOfferService { get; init; }
+    private QuestBoardService QuestBoardService { get; init; }
     private TitleSyncService TitleSyncService { get; init; }
     private HousingActivityService HousingActivityService { get; init; }
     private NameplateTitleService NameplateTitleService { get; init; }
@@ -110,6 +112,8 @@ public sealed class Plugin : IDalamudPlugin
         MainWindow = new MainWindow(this, QuestManager);
         QuestTrackerWindow = new QuestTrackerWindow(this, QuestManager);
         QuestOfferWindow = new QuestOfferWindow(this);
+        QuestBoardService = new QuestBoardService(this, QuestManager);
+        QuestBoardWindow = new QuestBoardWindow(this, QuestBoardService);
         QuestOfferService = new QuestOfferService(this, ClientState, ToastGui, PluginLog, QuestOfferWindow);
         TitleSyncService = new TitleSyncService(this, ClientState, ObjectTable, PluginLog);
         HousingActivityService = new HousingActivityService(ClientState, PluginLog, OnHousingTerritoryEntered);
@@ -118,6 +122,7 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(MainWindow);
         WindowSystem.AddWindow(QuestTrackerWindow);
         WindowSystem.AddWindow(QuestOfferWindow);
+        WindowSystem.AddWindow(QuestBoardWindow);
         
         // Show quest tracker if configured
         if (Configuration.ShowQuestTracker)
@@ -146,6 +151,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void DrawUI()
     {
+        QuestBoardService.Tick();
         TitleSyncService.Tick();
         if (NameplateTitleService.ShouldAnimateGradientTitles() && DateTime.UtcNow >= nextGradientRedrawAtUtc)
         {
@@ -176,7 +182,8 @@ public sealed class Plugin : IDalamudPlugin
             }
 
             var previousTitle = QuestManager.GetStats().UnlockedTitle;
-            var result = QuestManager.IncrementQuestProgressFromChatDetailed(text);
+            var senderText = sender.TextValue;
+            var result = QuestManager.IncrementQuestProgressFromChatDetailed(text, senderText);
             var newTitle = QuestManager.GetStats().UnlockedTitle;
             var leveledUp = !string.Equals(previousTitle, newTitle, StringComparison.Ordinal);
 
@@ -384,6 +391,7 @@ public sealed class Plugin : IDalamudPlugin
         HousingActivityService?.Dispose();
         NameplateTitleService?.Dispose();
         QuestOfferWindow?.Dispose();
+        QuestBoardWindow?.Dispose();
         QuestTrackerWindow?.Dispose();
 
         PluginLog.Info("Social Morpho disposed");
@@ -395,6 +403,11 @@ public sealed class Plugin : IDalamudPlugin
         {
             PluginLog.Warning("No quest offer available for manual popup test.");
         }
+    }
+
+    public void OpenQuestBoard()
+    {
+        QuestBoardWindow.IsOpen = true;
     }
 
     public void TestQuestCompleteSound()

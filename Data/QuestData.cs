@@ -18,6 +18,9 @@ public class QuestData
     public ResetSchedule ResetSchedule { get; set; } = ResetSchedule.None;
     public DateTime? LastResetDate { get; set; }
     public List<string> TriggerPhrases { get; set; } = new();
+    public AntiCheeseRisk AntiCheeseRisk { get; set; } = AntiCheeseRisk.Medium;
+    public string SeasonId { get; set; } = string.Empty;
+    public bool RequiresDuoPartner { get; set; } = false;
 }
 
 public enum QuestType
@@ -33,4 +36,11 @@ public enum ResetSchedule
     None,
     Daily,
     Weekly
+}
+
+public enum AntiCheeseRisk
+{
+    Low,
+    Medium,
+    High
 }

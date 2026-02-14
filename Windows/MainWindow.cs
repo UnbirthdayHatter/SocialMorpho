@@ -52,6 +52,7 @@ public class MainWindow : Window, IDisposable
     private void DrawTopTitleProgress()
     {
         var progress = QuestManager.GetTitleProgress();
+        var reputation = QuestManager.GetReputationProgress();
 
         ImGui.TextUnformatted($"Title: {progress.CurrentTitle}");
         ImGui.SameLine();
@@ -61,6 +62,17 @@ public class MainWindow : Window, IDisposable
         var pct = needed <= 0 ? 1f : Math.Clamp((float)progress.CurrentCompletions / needed, 0f, 1f);
         ImGui.ProgressBar(pct, new Vector2(-1f, 18f), $"{progress.CurrentCompletions}/{needed}");
         ImGui.TextDisabled($"{progress.RemainingToNext} completion(s) to next title");
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted($"Reputation: {reputation.CurrentRank}");
+        ImGui.SameLine();
+        ImGui.TextDisabled($"Next: {reputation.NextRank}");
+        var repSpan = Math.Max(1, reputation.NextRankXp - reputation.CurrentRankXpFloor);
+        var repProgress = reputation.NextRank == "Max rank reached"
+            ? 1f
+            : Math.Clamp((float)(reputation.CurrentXp - reputation.CurrentRankXpFloor) / repSpan, 0f, 1f);
+        ImGui.ProgressBar(repProgress, new Vector2(-1f, 16f), $"{reputation.CurrentXp} XP");
+        ImGui.TextDisabled($"Next reward: {reputation.NextRewardTitle} + {reputation.NextRewardStyle}");
     }
 
     private void DrawQuestList()
@@ -166,6 +178,22 @@ public class MainWindow : Window, IDisposable
         ImGui.Text($"Progress: {quest.CurrentCount}/{quest.GoalCount}");
         ImGui.Text($"Status: {(quest.Completed ? "Completed" : "In Progress")}");
         ImGui.Text($"Reset Schedule: {quest.ResetSchedule}");
+        ImGui.Text($"Anti-Cheese Risk: {quest.AntiCheeseRisk}");
+
+        var risk = quest.AntiCheeseRisk;
+        if (ImGui.BeginCombo("Risk Class", risk.ToString()))
+        {
+            foreach (var option in Enum.GetValues<AntiCheeseRisk>())
+            {
+                var selected = risk == option;
+                if (ImGui.Selectable(option.ToString(), selected))
+                {
+                    quest.AntiCheeseRisk = option;
+                    Plugin.Configuration.Save();
+                }
+            }
+            ImGui.EndCombo();
+        }
         
         ImGui.Spacing();
         ImGui.TextWrapped("Description:");
@@ -205,6 +233,8 @@ public class MainWindow : Window, IDisposable
         bool shareTitleSync = Plugin.Configuration.ShareTitleSync;
         bool showSyncedTitles = Plugin.Configuration.ShowSyncedTitles;
         bool enableQuestChains = Plugin.Configuration.EnableQuestChains;
+        bool enableDuoSynergy = Plugin.Configuration.EnableDuoSynergy;
+        var duoPartnerName = Plugin.Configuration.DuoPartnerName ?? string.Empty;
         var antiCheeseTier = string.IsNullOrWhiteSpace(Plugin.Configuration.AntiCheeseTier) ? "Balanced" : Plugin.Configuration.AntiCheeseTier;
         var rewardTitleColorPreset = Plugin.Configuration.RewardTitleColorPreset;
         var selectedStarterTitle = Plugin.Configuration.SelectedStarterTitle;
@@ -214,6 +244,14 @@ public class MainWindow : Window, IDisposable
         var stats = QuestManager.GetStats();
         var secretProgress = QuestManager.GetSecretTitleProgress();
         var unlockedSecrets = new HashSet<string>(secretProgress.Where(s => s.Unlocked).Select(s => s.Title), StringComparer.Ordinal);
+        foreach (var seasonalTitle in Plugin.Configuration.UnlockedSeasonalTitles)
+        {
+            unlockedSecrets.Add(seasonalTitle);
+        }
+        foreach (var repReward in Plugin.Configuration.UnlockedReputationRewards)
+        {
+            unlockedSecrets.Add(repReward);
+        }
 
         var titleColorOptions = new[]
         {
@@ -229,6 +267,11 @@ public class MainWindow : Window, IDisposable
             new RewardColorOption("Violet Gradient", null),
             new RewardColorOption("Sunset Gradient", null),
             new RewardColorOption("Seafoam Gradient", null),
+            new RewardColorOption("Valentione Gradient", "Rosebound Courier"),
+            new RewardColorOption("Companion Gradient", "Companion of Hearts"),
+            new RewardColorOption("Confidant Gradient", "Trusted Confidant"),
+            new RewardColorOption("Muse Gradient", "Midnight Muse"),
+            new RewardColorOption("Heartbound Gradient", "Heartbound Legend"),
             new RewardColorOption("Rainbow Gradient", "The Perfect Legend"),
             new RewardColorOption("Lily Gradient", "Butterfly Kisses"),
             new RewardColorOption("Royal Gradient", "Boogie Master"),
@@ -487,6 +530,18 @@ public class MainWindow : Window, IDisposable
                     Plugin.Configuration.Save();
                 }
 
+                if (ImGui.Checkbox("Enable Duo Synergy Quests", ref enableDuoSynergy))
+                {
+                    Plugin.Configuration.EnableDuoSynergy = enableDuoSynergy;
+                    Plugin.Configuration.Save();
+                }
+
+                if (ImGui.InputText("Duo Partner Name", ref duoPartnerName, 64))
+                {
+                    Plugin.Configuration.DuoPartnerName = duoPartnerName.Trim();
+                    Plugin.Configuration.Save();
+                }
+
                 var antiCheeseOptions = new[] { "Relaxed", "Balanced", "Strict" };
                 if (ImGui.BeginCombo("Anti-Cheese Cooldown Tier", antiCheeseTier))
                 {
@@ -502,6 +557,8 @@ public class MainWindow : Window, IDisposable
                     }
                     ImGui.EndCombo();
                 }
+
+                ImGui.TextDisabled($"Anti-cheese status: {QuestManager.GetAntiCheeseStatus()}");
             }
 
             if (ImGui.CollapsingHeader("Tools"))
@@ -538,6 +595,12 @@ public class MainWindow : Window, IDisposable
                 if (ImGui.Button("Test Toast Icons"))
                 {
                     Plugin.TriggerToastIconPreview();
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("Open Quest Board"))
+                {
+                    Plugin.OpenQuestBoard();
                 }
 
                 ImGui.SameLine();

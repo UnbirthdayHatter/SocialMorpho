@@ -23,6 +23,13 @@ public class Configuration : IPluginConfiguration
     public List<ulong> CurrentDailyQuestIds { get; set; } = new();
     public DateTime? LastQuestOfferPopupDate { get; set; }
     public List<string> ProcessedQuestOfferIds { get; set; } = new();
+    public DateTime? LastQuestBoardRefreshDate { get; set; }
+    public List<string> ActiveQuestBoardOfferIds { get; set; } = new();
+    public List<string> AcceptedQuestBoardOfferIds { get; set; } = new();
+    public List<string> DismissedQuestBoardOfferIds { get; set; } = new();
+    public string QuestBoardTrimPreset { get; set; } = "Balanced";
+    public List<string> UnlockedSeasonalTitles { get; set; } = new();
+    public List<string> UnlockedReputationRewards { get; set; } = new();
     public string ActiveQuestPreset { get; set; } = "Solo";
     public SocialStats Stats { get; set; } = new();
     public bool ShowRewardTitleOnNameplate { get; set; } = false;
@@ -45,6 +52,8 @@ public class Configuration : IPluginConfiguration
     public bool AutoLoadJsonQuests { get; set; } = false;
     public string AntiCheeseTier { get; set; } = "Balanced";
     public bool EnableQuestChains { get; set; } = true;
+    public bool EnableDuoSynergy { get; set; } = false;
+    public string DuoPartnerName { get; set; } = string.Empty;
     public DateTime? LastDailyChainDate { get; set; }
     public int DailyChainCompletions { get; set; } = 0;
 

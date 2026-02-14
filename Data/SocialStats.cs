@@ -17,6 +17,7 @@ public class SocialStats
     public string UnlockedTitle { get; set; } = "New Adventurer";
     public List<DailyCompletionEntry> RecentDailyCompletions { get; set; } = new();
     public Dictionary<string, int> EmoteReceivedCounts { get; set; } = new();
+    public int ReputationXp { get; set; } = 0;
 }
 
 [Serializable]
@@ -65,4 +66,16 @@ public class SecretTitleProgressInfo
     public required int CurrentCount { get; init; }
     public required int Requirement { get; init; }
     public required bool Unlocked { get; init; }
+}
+
+public class ReputationProgressInfo
+{
+    public required string CurrentRank { get; init; }
+    public required string NextRank { get; init; }
+    public required int CurrentXp { get; init; }
+    public required int CurrentRankXpFloor { get; init; }
+    public required int NextRankXp { get; init; }
+    public required int RemainingToNext { get; init; }
+    public required string NextRewardTitle { get; init; }
+    public required string NextRewardStyle { get; init; }
 }
