@@ -22,12 +22,6 @@ public sealed class NameplateTitleService : IDisposable
 
     private void OnNamePlateUpdate(INamePlateUpdateContext context, IReadOnlyList<INamePlateUpdateHandler> handlers)
     {
-        if (this.plugin.IsHonorificBridgeActive())
-        {
-            // Honorific/Lightless handles rendering and colors in this mode.
-            return;
-        }
-
         var localEnabled = this.plugin.Configuration.ShowRewardTitleOnNameplate;
         var syncEnabled = this.plugin.Configuration.EnableTitleSync && this.plugin.Configuration.ShowSyncedTitles;
         if (!localEnabled && !syncEnabled)
@@ -73,6 +67,13 @@ public sealed class NameplateTitleService : IDisposable
             {
                 title = byObjectName.title;
                 colorPreset = string.IsNullOrWhiteSpace(byObjectName.colorPreset) ? "Gold" : byObjectName.colorPreset;
+            }
+            else if (syncEnabled &&
+                     this.titleSyncService.TryGetHonorificTitleForGameObjectId(handler.GameObjectId, out var honorificTitle) &&
+                     !string.IsNullOrWhiteSpace(honorificTitle.title))
+            {
+                title = honorificTitle.title;
+                colorPreset = string.IsNullOrWhiteSpace(honorificTitle.colorPreset) ? "Gold" : honorificTitle.colorPreset;
             }
 
             if (string.IsNullOrWhiteSpace(title))

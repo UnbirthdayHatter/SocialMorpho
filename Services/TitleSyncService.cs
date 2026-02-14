@@ -383,6 +383,88 @@ public sealed class TitleSyncService : IDisposable
         }
     }
 
+    private bool TryInvokeIpcFuncDynamic(string callGateName, object[] args, out object? value)
+    {
+        value = null;
+        try
+        {
+            var argTypes = args.Select(a => a.GetType()).ToArray();
+            var methods = this.plugin.PluginInterface.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => string.Equals(m.Name, "GetIpcSubscriber", StringComparison.Ordinal) &&
+                            m.IsGenericMethodDefinition &&
+                            m.GetParameters().Length == 1 &&
+                            m.GetParameters()[0].ParameterType == typeof(string) &&
+                            m.GetGenericArguments().Length == argTypes.Length + 1)
+                .ToArray();
+
+            foreach (var method in methods)
+            {
+                try
+                {
+                    var genericArgs = new Type[argTypes.Length + 1];
+                    Array.Copy(argTypes, genericArgs, argTypes.Length);
+                    genericArgs[^1] = typeof(object);
+                    var generic = method.MakeGenericMethod(genericArgs);
+                    var subscriber = generic.Invoke(this.plugin.PluginInterface, [callGateName]);
+                    if (subscriber == null)
+                    {
+                        continue;
+                    }
+
+                    var invokeFunc = subscriber.GetType().GetMethod("InvokeFunc", BindingFlags.Public | BindingFlags.Instance);
+                    if (invokeFunc == null)
+                    {
+                        continue;
+                    }
+
+                    value = invokeFunc.Invoke(subscriber, args);
+                    return true;
+                }
+                catch
+                {
+                }
+            }
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string? ExtractHonorificTitleText(object? value)
+    {
+        if (value == null)
+        {
+            return null;
+        }
+
+        if (value is string s)
+        {
+            return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+        }
+
+        try
+        {
+            var t = value.GetType();
+            foreach (var propName in new[] { "DisplayTitle", "Title", "Text" })
+            {
+                var prop = t.GetProperty(propName, BindingFlags.Public | BindingFlags.Instance);
+                var raw = prop?.GetValue(value)?.ToString();
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    return raw.Trim();
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
     private async Task PushLocalTitleAsync()
     {
         var cfg = this.plugin.Configuration;
@@ -624,6 +706,52 @@ public sealed class TitleSyncService : IDisposable
         return false;
     }
 
+    public bool TryGetHonorificTitleForGameObjectId(ulong gameObjectId, out SyncedTitleRecord record)
+    {
+        record = default!;
+        if (!this.honorificBridgeActive)
+        {
+            return false;
+        }
+
+        foreach (var obj in this.objectTable)
+        {
+            if (obj == null || !IsObjectMatch(obj, gameObjectId))
+            {
+                continue;
+            }
+
+            var objectIndex = TryGetObjectIndex(obj);
+            if (objectIndex < 0)
+            {
+                return false;
+            }
+
+            if (!TryInvokeIpcFuncDynamic("Honorific.GetCharacterTitle", [objectIndex], out var raw))
+            {
+                return false;
+            }
+
+            var title = ExtractHonorificTitleText(raw);
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                return false;
+            }
+
+            record = new SyncedTitleRecord
+            {
+                character = TryGetName(obj) ?? string.Empty,
+                world = TryGetWorld(obj) ?? string.Empty,
+                title = title,
+                colorPreset = "Gold",
+                updatedAtUtc = DateTime.UtcNow.ToString("O"),
+            };
+            return true;
+        }
+
+        return false;
+    }
+
     private bool TryGetLocalCharacter(out string character, out string world)
     {
         character = string.Empty;
@@ -643,6 +771,30 @@ public sealed class TitleSyncService : IDisposable
         }
 
         return !string.IsNullOrWhiteSpace(character);
+    }
+
+    private static int TryGetObjectIndex(object obj)
+    {
+        try
+        {
+            var prop = obj.GetType().GetProperty("ObjectIndex", BindingFlags.Public | BindingFlags.Instance);
+            if (prop == null)
+            {
+                return -1;
+            }
+
+            var raw = prop.GetValue(obj);
+            if (raw == null)
+            {
+                return -1;
+            }
+
+            return Convert.ToInt32(raw);
+        }
+        catch
+        {
+            return -1;
+        }
     }
 
     private static string? TryGetName(object source)
