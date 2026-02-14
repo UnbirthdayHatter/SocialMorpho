@@ -522,6 +522,12 @@ public sealed class TitleSyncService : IDisposable
 
         if (value is string s)
         {
+            var parsedFromJson = TryExtractTitleFromJsonText(s);
+            if (!string.IsNullOrWhiteSpace(parsedFromJson))
+            {
+                return parsedFromJson;
+            }
+
             return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
         }
 
@@ -543,6 +549,65 @@ public sealed class TitleSyncService : IDisposable
         }
 
         return null;
+    }
+
+    private static string? TryExtractTitleFromJsonText(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return null;
+        }
+
+        var trimmed = input.Trim();
+        if (!trimmed.StartsWith("{", StringComparison.Ordinal) &&
+            !trimmed.StartsWith("[", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(trimmed);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in root.EnumerateArray())
+                {
+                    var title = TryReadTitleProperty(item);
+                    if (!string.IsNullOrWhiteSpace(title))
+                    {
+                        return title;
+                    }
+                }
+            }
+            else if (root.ValueKind == JsonValueKind.Object)
+            {
+                return TryReadTitleProperty(root);
+            }
+        }
+        catch
+        {
+            // Not valid JSON payload; fall back to raw text.
+        }
+
+        return null;
+    }
+
+    private static string? TryReadTitleProperty(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (!element.TryGetProperty("Title", out var titleProp) &&
+            !element.TryGetProperty("title", out titleProp))
+        {
+            return null;
+        }
+
+        var text = titleProp.GetString();
+        return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
     }
 
     private async Task PushLocalTitleAsync()
