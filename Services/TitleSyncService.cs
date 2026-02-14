@@ -159,13 +159,18 @@ public sealed class TitleSyncService : IDisposable
 
     private bool DetectHonorificBridgeAvailable()
     {
-        // Honorific API compatibility used by Lightless is 3.1+.
-        if (!TryInvokeIpcFunc<(uint major, uint minor)>("Honorific.ApiVersion", out var version))
+        if (TryInvokeIpcFunc<bool>("Honorific.Ready", out var ready) && ready)
         {
-            return false;
+            return true;
         }
 
-        return version.major == 3 && version.minor >= 1;
+        // Honorific API compatibility used by Lightless is 3.1+.
+        if (TryInvokeIpcFunc<(uint major, uint minor)>("Honorific.ApiVersion", out var version))
+        {
+            return version.major == 3 && version.minor >= 1;
+        }
+
+        return false;
     }
 
     private bool IsHonorificFallbackActive(Configuration cfg, DateTime nowUtc)
@@ -317,32 +322,60 @@ public sealed class TitleSyncService : IDisposable
     {
         try
         {
-            var method = this.plugin.PluginInterface.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .FirstOrDefault(m => string.Equals(m.Name, "GetIpcSubscriber", StringComparison.Ordinal) &&
-                                     m.IsGenericMethodDefinition &&
-                                     m.GetGenericArguments().Length == 3 &&
-                                     m.GetParameters().Length == 1 &&
-                                     m.GetParameters()[0].ParameterType == typeof(string));
-            if (method == null)
+            var methods = this.plugin.PluginInterface.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => string.Equals(m.Name, "GetIpcSubscriber", StringComparison.Ordinal) &&
+                            m.IsGenericMethodDefinition &&
+                            m.GetParameters().Length == 1 &&
+                            m.GetParameters()[0].ParameterType == typeof(string))
+                .ToArray();
+
+            if (methods.Length == 0)
             {
                 return false;
             }
 
-            var generic = method.MakeGenericMethod(typeof(T1), typeof(T2), typeof(object));
-            var subscriber = generic.Invoke(this.plugin.PluginInterface, [callGateName]);
-            if (subscriber == null)
+            foreach (var method in methods)
             {
-                return false;
+                var arity = method.GetGenericArguments().Length;
+                object? subscriber = null;
+                try
+                {
+                    if (arity == 2)
+                    {
+                        var generic = method.MakeGenericMethod(typeof(T1), typeof(T2));
+                        subscriber = generic.Invoke(this.plugin.PluginInterface, [callGateName]);
+                    }
+                    else if (arity == 3)
+                    {
+                        var generic = method.MakeGenericMethod(typeof(T1), typeof(T2), typeof(object));
+                        subscriber = generic.Invoke(this.plugin.PluginInterface, [callGateName]);
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (subscriber == null)
+                {
+                    continue;
+                }
+
+                var invokeAction = subscriber.GetType().GetMethod("InvokeAction", BindingFlags.Public | BindingFlags.Instance);
+                if (invokeAction == null)
+                {
+                    continue;
+                }
+
+                invokeAction.Invoke(subscriber, [arg1, arg2]);
+                return true;
             }
 
-            var invokeAction = subscriber.GetType().GetMethod("InvokeAction", BindingFlags.Public | BindingFlags.Instance);
-            if (invokeAction == null)
-            {
-                return false;
-            }
-
-            invokeAction.Invoke(subscriber, [arg1, arg2]);
-            return true;
+            return false;
         }
         catch
         {

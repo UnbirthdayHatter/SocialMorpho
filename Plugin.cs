@@ -435,6 +435,13 @@ public sealed class Plugin : IDalamudPlugin
             changed = true;
         }
 
+        // Keep fallback always enabled so users do not need manual setup.
+        if (!Configuration.PreferHonorificSync)
+        {
+            Configuration.PreferHonorificSync = true;
+            changed = true;
+        }
+
         if (changed)
         {
             Configuration.Save();

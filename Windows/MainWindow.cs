@@ -202,7 +202,6 @@ public class MainWindow : Window, IDisposable
         bool enableTitleSync = Plugin.Configuration.EnableTitleSync;
         bool shareTitleSync = Plugin.Configuration.ShareTitleSync;
         bool showSyncedTitles = Plugin.Configuration.ShowSyncedTitles;
-        bool preferHonorificSync = Plugin.Configuration.PreferHonorificSync;
         var rewardTitleColorPreset = Plugin.Configuration.RewardTitleColorPreset;
         var selectedStarterTitle = Plugin.Configuration.SelectedStarterTitle;
         var presetOptions = new[] { "Solo", "Party", "RP" };
@@ -350,12 +349,7 @@ public class MainWindow : Window, IDisposable
 
             if (ImGui.CollapsingHeader("Title Sync (Phase 1)"))
             {
-                if (ImGui.Checkbox("Enable Honorific/Lightless Fallback", ref preferHonorificSync))
-                {
-                    Plugin.Configuration.PreferHonorificSync = preferHonorificSync;
-                    Plugin.Configuration.Save();
-                    Plugin.RequestTitleSyncNow();
-                }
+                ImGui.TextDisabled("Honorific/Lightless fallback: always enabled");
 
                 if (ImGui.Checkbox("Enable Title Sync", ref enableTitleSync))
                 {
