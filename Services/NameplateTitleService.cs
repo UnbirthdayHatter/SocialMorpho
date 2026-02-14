@@ -147,8 +147,6 @@ public sealed class NameplateTitleService : IDisposable
         // Use title-specific fields only when available in current Dalamud build.
         TrySetProperty(handler, "TitleTextColor", textColor);
         TrySetProperty(handler, "TitleEdgeColor", edgeColor);
-        TrySetProperty(handler, "PrefixTextColor", textColor);
-        TrySetProperty(handler, "PrefixEdgeColor", edgeColor);
     }
 
     private static void TrySetProperty(object target, string propertyName, uint value)
@@ -169,23 +167,23 @@ public sealed class NameplateTitleService : IDisposable
     private static (uint textColor, uint edgeColor) GetColors(string preset)
     {
         // FFXIV-style readable edge with accent text.
+        // Nameplate fields use ARGB ordering here.
         var edge = 0xFF101010u;
         return preset switch
         {
-            // NamePlate API expects ABGR ordering in the packed uint.
-            "Pink" => (0xFFBB8BF0u, edge),
-            "Cyan" => (0xFFFFD678u, edge),
-            "Rose" => (0xFF9A9AF6u, edge),
-            "Mint" => (0xFFC8F2A0u, edge),
-            "Violet" => (0xFFE8A98Du, edge),
-            "Gold Glow" => (0xFF83C3E5u, 0xFF3C2F15u),
-            "Pink Glow" => (0xFFBB8BF0u, 0xFF3A1C39u),
-            "Cyan Glow" => (0xFFFFD678u, 0xFF1A3A3Au),
-            "Rose Glow" => (0xFF9A9AF6u, 0xFF3A203Au),
-            "Mint Glow" => (0xFFC8F2A0u, 0xFF1E3824u),
-            "Violet Glow" => (0xFFE8A98Du, 0xFF2A2140u),
+            "Pink" => (0xFFF08BBBu, edge),
+            "Cyan" => (0xFF78D6FFu, edge),
+            "Rose" => (0xFFF69A9Au, edge),
+            "Mint" => (0xFFA0F2C8u, edge),
+            "Violet" => (0xFF8DA9E8u, edge),
+            "Gold Glow" => (0xFFE5C383u, 0xFF3C2F15u),
+            "Pink Glow" => (0xFFF08BBBu, 0xFF3A1C39u),
+            "Cyan Glow" => (0xFF78D6FFu, 0xFF1A3A3Au),
+            "Rose Glow" => (0xFFF69A9Au, 0xFF3A203Au),
+            "Mint Glow" => (0xFFA0F2C8u, 0xFF1E3824u),
+            "Violet Glow" => (0xFF8DA9E8u, 0xFF2A2140u),
             "White Glow" => (0xFFF2F2F2u, 0xFF2A2A2Au),
-            _ => (0xFF83C3E5u, edge), // Gold
+            _ => (0xFFE5C383u, edge), // Gold
         };
     }
 

@@ -65,6 +65,12 @@ public sealed class TitleSyncService : IDisposable
                 this.nextPushAtUtc = now.AddSeconds(20);
             }
 
+            if (cfg.ShowSyncedTitles && now >= this.nextPullAtUtc)
+            {
+                PullHonorificTitlesIntoCache();
+                this.nextPullAtUtc = now.AddSeconds(10);
+            }
+
             return;
         }
 
@@ -240,6 +246,68 @@ public sealed class TitleSyncService : IDisposable
         catch (Exception ex)
         {
             this.log.Warning($"Honorific handoff failed: {ex.Message}");
+        }
+    }
+
+    private void PullHonorificTitlesIntoCache()
+    {
+        try
+        {
+            if (!TryInvokeIpcFunc<object>("Honorific.GetCharacterTitleList", out var raw) || raw == null)
+            {
+                return;
+            }
+
+            if (raw is not System.Collections.IEnumerable enumerable)
+            {
+                return;
+            }
+
+            foreach (var entry in enumerable)
+            {
+                if (entry == null)
+                {
+                    continue;
+                }
+
+                string? character = null;
+                object? titleObject = null;
+
+                var t = entry.GetType();
+                var keyProp = t.GetProperty("Key", BindingFlags.Public | BindingFlags.Instance);
+                var valueProp = t.GetProperty("Value", BindingFlags.Public | BindingFlags.Instance);
+                if (keyProp != null && valueProp != null)
+                {
+                    character = keyProp.GetValue(entry)?.ToString();
+                    titleObject = valueProp.GetValue(entry);
+                }
+                else
+                {
+                    character = t.GetProperty("Character", BindingFlags.Public | BindingFlags.Instance)?.GetValue(entry)?.ToString()
+                        ?? t.GetProperty("Name", BindingFlags.Public | BindingFlags.Instance)?.GetValue(entry)?.ToString();
+                    titleObject = entry;
+                }
+
+                var title = ExtractHonorificTitleText(titleObject);
+                if (string.IsNullOrWhiteSpace(character) || string.IsNullOrWhiteSpace(title))
+                {
+                    continue;
+                }
+
+                var record = new SyncedTitleRecord
+                {
+                    character = character.Trim(),
+                    world = string.Empty,
+                    title = title,
+                    colorPreset = "Gold",
+                    updatedAtUtc = DateTime.UtcNow.ToString("O"),
+                };
+
+                this.cache[$"title:{record.character.ToLowerInvariant()}"] = record;
+            }
+        }
+        catch
+        {
         }
     }
 
