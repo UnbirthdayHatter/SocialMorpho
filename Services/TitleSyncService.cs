@@ -19,7 +19,8 @@ public sealed class TitleSyncService : IDisposable
     private readonly IObjectTable objectTable;
     private readonly IPluginLog log;
     private readonly Dictionary<string, SyncedTitleRecord> cache = new(StringComparer.OrdinalIgnoreCase);
-    private DateTime nextPullAtUtc = DateTime.MinValue;
+    private DateTime nextPullAtUtc = DateTime.MinValue; // cloud pull schedule
+    private DateTime nextHonorificPullAtUtc = DateTime.MinValue;
     private DateTime nextPushAtUtc = DateTime.MinValue;
     private DateTime nextHonorificCheckAtUtc = DateTime.MinValue;
     private DateTime cloudUnavailableUntilUtc = DateTime.MinValue;
@@ -69,10 +70,10 @@ public sealed class TitleSyncService : IDisposable
         }
         
         // Always keep Honorific cache fresh when available.
-        if (cfg.ShowSyncedTitles && this.honorificBridgeActive && now >= this.nextPullAtUtc)
+        if (cfg.ShowSyncedTitles && this.honorificBridgeActive && now >= this.nextHonorificPullAtUtc)
         {
             PullHonorificTitlesIntoCache();
-            this.nextPullAtUtc = now.AddSeconds(10);
+            this.nextHonorificPullAtUtc = now.AddSeconds(10);
         }
 
         if (cfg.ShareTitleSync && now >= this.nextPushAtUtc && !this.pushInFlight)
@@ -160,6 +161,7 @@ public sealed class TitleSyncService : IDisposable
     private void OnLogin()
     {
         this.nextPullAtUtc = DateTime.MinValue;
+        this.nextHonorificPullAtUtc = DateTime.MinValue;
         this.nextPushAtUtc = DateTime.MinValue;
         this.nextHonorificCheckAtUtc = DateTime.MinValue;
     }
@@ -697,8 +699,10 @@ public sealed class TitleSyncService : IDisposable
             return false;
         }
 
-        return input.Contains("\"Title\"", StringComparison.OrdinalIgnoreCase) &&
-               input.Contains("GradientAnimationStyle", StringComparison.OrdinalIgnoreCase);
+        var hasTitleKey = input.Contains("\"Title\"", StringComparison.OrdinalIgnoreCase) ||
+                          input.Contains("\\\"Title\\\"", StringComparison.OrdinalIgnoreCase);
+        var hasStyleKey = input.Contains("GradientAnimationStyle", StringComparison.OrdinalIgnoreCase);
+        return hasTitleKey && hasStyleKey;
     }
 
     private async Task PushLocalTitleAsync()

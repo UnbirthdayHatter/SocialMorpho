@@ -222,8 +222,10 @@ public sealed class NameplateTitleService : IDisposable
         }
 
         // Guard against Honorific payload blobs accidentally being treated as title text.
-        var looksLikePayload = trimmed.Contains("\"Title\"", StringComparison.OrdinalIgnoreCase) &&
-                               trimmed.Contains("GradientAnimationStyle", StringComparison.OrdinalIgnoreCase);
+        var looksLikePayload =
+            (trimmed.Contains("\"Title\"", StringComparison.OrdinalIgnoreCase) ||
+             trimmed.Contains("\\\"Title\\\"", StringComparison.OrdinalIgnoreCase)) &&
+            trimmed.Contains("GradientAnimationStyle", StringComparison.OrdinalIgnoreCase);
         if (!looksLikePayload)
         {
             return trimmed;
