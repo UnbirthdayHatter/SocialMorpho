@@ -28,6 +28,7 @@ public sealed class TitleSyncService : IDisposable
     private string lastPushedTitle = string.Empty;
     private string lastPushedColor = string.Empty;
     private string lastHonorificTitle = string.Empty;
+    private string lastHonorificColor = string.Empty;
     private bool honorificBridgeActive;
     private int consecutiveCloudFailures;
     private bool pullInFlight;
@@ -214,12 +215,17 @@ public sealed class TitleSyncService : IDisposable
         try
         {
             var title = this.plugin.QuestManager.GetStats().UnlockedTitle?.Trim();
+            var colorPreset = string.IsNullOrWhiteSpace(this.plugin.Configuration.RewardTitleColorPreset)
+                ? "Gold"
+                : this.plugin.Configuration.RewardTitleColorPreset.Trim();
             if (string.IsNullOrWhiteSpace(title))
             {
                 return;
             }
 
-            if (string.Equals(title, this.lastHonorificTitle, StringComparison.Ordinal))
+            var encodedTitle = EncodeTitleForHonorific(title, colorPreset);
+            if (string.Equals(encodedTitle, this.lastHonorificTitle, StringComparison.Ordinal) &&
+                string.Equals(colorPreset, this.lastHonorificColor, StringComparison.Ordinal))
             {
                 return;
             }
@@ -230,11 +236,11 @@ public sealed class TitleSyncService : IDisposable
             }
 
             // Primary path: direct IPC so Lightless observes normal Honorific title state.
-            var pushed = TryInvokeIpcAction<int, string>("Honorific.SetCharacterTitle", objectIndex, title);
+            var pushed = TryInvokeIpcAction<int, string>("Honorific.SetCharacterTitle", objectIndex, encodedTitle);
             if (!pushed && TryGetLocalCharacter(out var localCharacter, out _))
             {
                 // Alternate shape used by some builds: character name + title.
-                pushed = TryInvokeIpcAction<string, string>("Honorific.SetCharacterTitle", localCharacter, title);
+                pushed = TryInvokeIpcAction<string, string>("Honorific.SetCharacterTitle", localCharacter, encodedTitle);
             }
 
             if (!pushed)
@@ -244,7 +250,7 @@ public sealed class TitleSyncService : IDisposable
                 if (now - this.lastHonorificCommandFallbackUtc >= TimeSpan.FromSeconds(15))
                 {
                     this.lastHonorificCommandFallbackUtc = now;
-                    var escapedTitle = title.Replace("\"", "\\\"", StringComparison.Ordinal);
+                    var escapedTitle = encodedTitle.Replace("\"", "\\\"", StringComparison.Ordinal);
                     pushed = this.plugin.TryRunCommandText($"/honorific force set \"{escapedTitle}\"");
                 }
             }
@@ -259,7 +265,8 @@ public sealed class TitleSyncService : IDisposable
                 return;
             }
 
-            this.lastHonorificTitle = title;
+            this.lastHonorificTitle = encodedTitle;
+            this.lastHonorificColor = colorPreset;
         }
         catch (Exception ex)
         {
@@ -292,7 +299,7 @@ public sealed class TitleSyncService : IDisposable
                 }
 
                 var character = TryGetName(obj);
-                var title = ExtractHonorificTitleText(rawTitle);
+                var title = ExtractHonorificTitleText(rawTitle, out var colorPreset);
                 if (string.IsNullOrWhiteSpace(character) || string.IsNullOrWhiteSpace(title))
                 {
                     continue;
@@ -303,7 +310,7 @@ public sealed class TitleSyncService : IDisposable
                     character = character.Trim(),
                     world = TryGetWorld(obj) ?? string.Empty,
                     title = title,
-                    colorPreset = "Gold",
+                    colorPreset = string.IsNullOrWhiteSpace(colorPreset) ? "Gold" : colorPreset,
                     updatedAtUtc = DateTime.UtcNow.ToString("O"),
                 };
 
@@ -531,7 +538,19 @@ public sealed class TitleSyncService : IDisposable
         }
     }
 
-    private static string? ExtractHonorificTitleText(object? value)
+    private static string? ExtractHonorificTitleText(object? value, out string colorPreset)
+    {
+        colorPreset = "Gold";
+        var rawTitle = ExtractHonorificTitleTextCore(value);
+        if (string.IsNullOrWhiteSpace(rawTitle))
+        {
+            return null;
+        }
+
+        return DecodeTitleFromHonorific(rawTitle, out colorPreset);
+    }
+
+    private static string? ExtractHonorificTitleTextCore(object? value)
     {
         if (value == null)
         {
@@ -542,7 +561,7 @@ public sealed class TitleSyncService : IDisposable
         {
             foreach (var item in enumerable)
             {
-                var nested = ExtractHonorificTitleText(item);
+                var nested = ExtractHonorificTitleTextCore(item);
                 if (!string.IsNullOrWhiteSpace(nested))
                 {
                     return nested;
@@ -569,7 +588,7 @@ public sealed class TitleSyncService : IDisposable
                 return null;
             }
 
-            return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+            return string.IsNullOrWhiteSpace(s) ? null : StripWrappingQuotes(s.Trim());
         }
 
         try
@@ -581,7 +600,7 @@ public sealed class TitleSyncService : IDisposable
             if (valueProp != null)
             {
                 var nestedValue = valueProp.GetValue(value);
-                var nestedTitle = ExtractHonorificTitleText(nestedValue);
+                var nestedTitle = ExtractHonorificTitleTextCore(nestedValue);
                 if (!string.IsNullOrWhiteSpace(nestedTitle))
                 {
                     return nestedTitle;
@@ -592,7 +611,7 @@ public sealed class TitleSyncService : IDisposable
             {
                 var prop = t.GetProperty(propName, BindingFlags.Public | BindingFlags.Instance);
                 var rawValue = prop?.GetValue(value);
-                var nestedTitle = ExtractHonorificTitleText(rawValue);
+                var nestedTitle = ExtractHonorificTitleTextCore(rawValue);
                 if (!string.IsNullOrWhiteSpace(nestedTitle))
                 {
                     return nestedTitle;
@@ -619,7 +638,7 @@ public sealed class TitleSyncService : IDisposable
 
             if (!string.IsNullOrWhiteSpace(asText))
             {
-                return asText.Trim();
+                return StripWrappingQuotes(asText.Trim());
             }
         }
         catch
@@ -685,7 +704,7 @@ public sealed class TitleSyncService : IDisposable
         }
 
         var text = titleProp.GetString();
-        return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+        return string.IsNullOrWhiteSpace(text) ? null : StripWrappingQuotes(text.Trim());
     }
 
     private static string? TryExtractTitleFromLoosePayload(string input)
@@ -711,7 +730,7 @@ public sealed class TitleSyncService : IDisposable
         var unescaped = raw.Replace("\\\"", "\"", StringComparison.Ordinal)
             .Replace("\\\\", "\\", StringComparison.Ordinal)
             .Trim();
-        return string.IsNullOrWhiteSpace(unescaped) ? null : unescaped;
+        return string.IsNullOrWhiteSpace(unescaped) ? null : StripWrappingQuotes(unescaped);
     }
 
     private static bool LooksLikeHonorificPayload(string input)
@@ -725,6 +744,52 @@ public sealed class TitleSyncService : IDisposable
                           input.Contains("\\\"Title\\\"", StringComparison.OrdinalIgnoreCase);
         var hasStyleKey = input.Contains("GradientAnimationStyle", StringComparison.OrdinalIgnoreCase);
         return hasTitleKey && hasStyleKey;
+    }
+
+    private static string EncodeTitleForHonorific(string title, string colorPreset)
+    {
+        var cleanTitle = StripWrappingQuotes(title);
+        var cleanPreset = Regex.Replace(colorPreset ?? "Gold", "[^A-Za-z0-9 _-]", string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(cleanPreset))
+        {
+            cleanPreset = "Gold";
+        }
+
+        return $"{cleanTitle} [[SMC:{cleanPreset}]]";
+    }
+
+    private static string DecodeTitleFromHonorific(string input, out string colorPreset)
+    {
+        colorPreset = "Gold";
+        var trimmed = StripWrappingQuotes(input.Trim());
+        var match = Regex.Match(trimmed, @"\s*\[\[SMC:(?<preset>[^\]]+)\]\]\s*$", RegexOptions.CultureInvariant);
+        if (!match.Success)
+        {
+            return trimmed;
+        }
+
+        var preset = match.Groups["preset"].Value.Trim();
+        if (!string.IsNullOrWhiteSpace(preset))
+        {
+            colorPreset = preset;
+        }
+
+        return StripWrappingQuotes(trimmed[..match.Index].Trim());
+    }
+
+    private static string StripWrappingQuotes(string value)
+    {
+        var result = value;
+        if (result.Length >= 2)
+        {
+            if ((result[0] == '"' && result[^1] == '"') ||
+                (result[0] == '\'' && result[^1] == '\''))
+            {
+                result = result[1..^1].Trim();
+            }
+        }
+
+        return result;
     }
 
     private async Task PushLocalTitleAsync()
@@ -994,7 +1059,7 @@ public sealed class TitleSyncService : IDisposable
                 return false;
             }
 
-            var title = ExtractHonorificTitleText(raw);
+            var title = ExtractHonorificTitleText(raw, out var colorPreset);
             if (string.IsNullOrWhiteSpace(title))
             {
                 return false;
@@ -1005,7 +1070,7 @@ public sealed class TitleSyncService : IDisposable
                 character = TryGetName(obj) ?? string.Empty,
                 world = TryGetWorld(obj) ?? string.Empty,
                 title = title,
-                colorPreset = "Gold",
+                colorPreset = string.IsNullOrWhiteSpace(colorPreset) ? "Gold" : colorPreset,
                 updatedAtUtc = DateTime.UtcNow.ToString("O"),
             };
             return true;

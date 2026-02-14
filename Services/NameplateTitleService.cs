@@ -228,7 +228,7 @@ public sealed class NameplateTitleService : IDisposable
             trimmed.Contains("GradientAnimationStyle", StringComparison.OrdinalIgnoreCase);
         if (!looksLikePayload)
         {
-            return trimmed;
+            return StripWrappingQuotes(trimmed);
         }
 
         var m = Regex.Match(trimmed, "\\\"Title\\\"\\s*:\\s*\\\"(?<t>(?:\\\\.|[^\\\"])*)\\\"", RegexOptions.CultureInvariant);
@@ -241,7 +241,22 @@ public sealed class NameplateTitleService : IDisposable
             .Replace("\\\"", "\"", StringComparison.Ordinal)
             .Replace("\\\\", "\\", StringComparison.Ordinal)
             .Trim();
-        return string.IsNullOrWhiteSpace(decoded) ? null : decoded;
+        return string.IsNullOrWhiteSpace(decoded) ? null : StripWrappingQuotes(decoded);
+    }
+
+    private static string StripWrappingQuotes(string value)
+    {
+        var result = value;
+        if (result.Length >= 2)
+        {
+            if ((result[0] == '"' && result[^1] == '"') ||
+                (result[0] == '\'' && result[^1] == '\''))
+            {
+                result = result[1..^1].Trim();
+            }
+        }
+
+        return result;
     }
 
     public void Dispose()
