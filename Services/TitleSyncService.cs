@@ -36,6 +36,7 @@ public sealed class TitleSyncService : IDisposable
     private DateTime lastPushErrorLogUtc = DateTime.MinValue;
     private DateTime lastHonorificWarnUtc = DateTime.MinValue;
     private DateTime lastHonorificInfoUtc = DateTime.MinValue;
+    private DateTime lastHonorificCommandFallbackUtc = DateTime.MinValue;
 
     public TitleSyncService(Plugin plugin, IClientState clientState, IObjectTable objectTable, IPluginLog log)
     {
@@ -230,13 +231,30 @@ public sealed class TitleSyncService : IDisposable
 
             // Primary path: direct IPC so Lightless observes normal Honorific title state.
             var pushed = TryInvokeIpcAction<int, string>("Honorific.SetCharacterTitle", objectIndex, title);
+            if (!pushed && TryGetLocalCharacter(out var localCharacter, out _))
+            {
+                // Alternate shape used by some builds: character name + title.
+                pushed = TryInvokeIpcAction<string, string>("Honorific.SetCharacterTitle", localCharacter, title);
+            }
+
+            if (!pushed)
+            {
+                // Controlled fallback to Honorific command path (max once per 15s).
+                var now = DateTime.UtcNow;
+                if (now - this.lastHonorificCommandFallbackUtc >= TimeSpan.FromSeconds(15))
+                {
+                    this.lastHonorificCommandFallbackUtc = now;
+                    var escapedTitle = title.Replace("\"", "\\\"", StringComparison.Ordinal);
+                    pushed = this.plugin.TryRunCommandText($"/honorific force set \"{escapedTitle}\"");
+                }
+            }
 
             if (!pushed)
             {
                 if (DateTime.UtcNow - this.lastHonorificWarnUtc >= TimeSpan.FromMinutes(1))
                 {
                     this.lastHonorificWarnUtc = DateTime.UtcNow;
-                    this.log.Warning("Honorific fallback active but SetCharacterTitle IPC failed.");
+                    this.log.Warning("Honorific fallback active but all title-set paths failed (IPC + command).");
                 }
                 return;
             }
