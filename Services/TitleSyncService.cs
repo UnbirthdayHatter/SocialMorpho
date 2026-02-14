@@ -540,6 +540,11 @@ public sealed class TitleSyncService : IDisposable
                 return parsedLoose;
             }
 
+            if (LooksLikeHonorificPayload(s))
+            {
+                return null;
+            }
+
             return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
         }
 
@@ -581,6 +586,11 @@ public sealed class TitleSyncService : IDisposable
             if (!string.IsNullOrWhiteSpace(parsedLoose))
             {
                 return parsedLoose;
+            }
+
+            if (LooksLikeHonorificPayload(asText ?? string.Empty))
+            {
+                return null;
             }
 
             if (!string.IsNullOrWhiteSpace(asText))
@@ -678,6 +688,17 @@ public sealed class TitleSyncService : IDisposable
             .Replace("\\\\", "\\", StringComparison.Ordinal)
             .Trim();
         return string.IsNullOrWhiteSpace(unescaped) ? null : unescaped;
+    }
+
+    private static bool LooksLikeHonorificPayload(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return false;
+        }
+
+        return input.Contains("\"Title\"", StringComparison.OrdinalIgnoreCase) &&
+               input.Contains("GradientAnimationStyle", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task PushLocalTitleAsync()

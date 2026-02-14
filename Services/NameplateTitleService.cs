@@ -1,6 +1,7 @@
 using Dalamud.Game.Gui.NamePlate;
 using Dalamud.Plugin.Services;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace SocialMorpho.Services;
 
@@ -76,6 +77,12 @@ public sealed class NameplateTitleService : IDisposable
                 colorPreset = string.IsNullOrWhiteSpace(honorificTitle.colorPreset) ? "Gold" : honorificTitle.colorPreset;
             }
 
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                continue;
+            }
+
+            title = NormalizeDisplayTitle(title);
             if (string.IsNullOrWhiteSpace(title))
             {
                 continue;
@@ -204,6 +211,35 @@ public sealed class NameplateTitleService : IDisposable
     private static uint ToAbgr(byte r, byte g, byte b)
     {
         return 0xFF000000u | ((uint)b << 16) | ((uint)g << 8) | r;
+    }
+
+    private static string? NormalizeDisplayTitle(string rawTitle)
+    {
+        var trimmed = rawTitle.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return null;
+        }
+
+        // Guard against Honorific payload blobs accidentally being treated as title text.
+        var looksLikePayload = trimmed.Contains("\"Title\"", StringComparison.OrdinalIgnoreCase) &&
+                               trimmed.Contains("GradientAnimationStyle", StringComparison.OrdinalIgnoreCase);
+        if (!looksLikePayload)
+        {
+            return trimmed;
+        }
+
+        var m = Regex.Match(trimmed, "\\\"Title\\\"\\s*:\\s*\\\"(?<t>(?:\\\\.|[^\\\"])*)\\\"", RegexOptions.CultureInvariant);
+        if (!m.Success)
+        {
+            return null;
+        }
+
+        var decoded = m.Groups["t"].Value
+            .Replace("\\\"", "\"", StringComparison.Ordinal)
+            .Replace("\\\\", "\\", StringComparison.Ordinal)
+            .Trim();
+        return string.IsNullOrWhiteSpace(decoded) ? null : decoded;
     }
 
     public void Dispose()
