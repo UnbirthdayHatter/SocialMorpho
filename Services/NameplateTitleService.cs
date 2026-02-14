@@ -110,6 +110,30 @@ public sealed class NameplateTitleService : IDisposable
         this.namePlateGui.RequestRedraw();
     }
 
+    public bool ShouldAnimateGradientTitles()
+    {
+        if (!this.plugin.Configuration.ShowRewardTitleOnNameplate)
+        {
+            return false;
+        }
+
+        var localPreset = ResolveLocalColorPreset(this.plugin.Configuration.Stats.UnlockedTitle);
+        if (IsGradientPreset(localPreset))
+        {
+            return true;
+        }
+
+        foreach (var synced in this.titleSyncService.GetSyncedTitleSnapshot(24))
+        {
+            if (IsGradientPreset(synced.colorPreset))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool TryGetHandlerCharacterName(INamePlateUpdateHandler handler, out string name)
     {
         name = string.Empty;
@@ -198,10 +222,10 @@ public sealed class NameplateTitleService : IDisposable
             "Rose" => (ToAbgr(0xF6, 0x9A, 0x9A), edge),
             "Mint" => (ToAbgr(0xA0, 0xF2, 0xC8), edge),
             "Violet" => (ToAbgr(0x8D, 0xA9, 0xE8), edge),
-            "Gold Gradient" => (BlendToAbgr(0xE5, 0xC3, 0x83, 0xFF, 0xEE, 0xB8, gradientPulse), ToAbgr(0x2E, 0x24, 0x12)),
-            "Rose Gradient" => (BlendToAbgr(0xF6, 0x9A, 0x9A, 0xFF, 0xC4, 0xDA, gradientPulse), ToAbgr(0x3A, 0x20, 0x2D)),
-            "Cyan Gradient" => (BlendToAbgr(0x78, 0xD6, 0xFF, 0xB8, 0xF2, 0xFF, gradientPulse), ToAbgr(0x1B, 0x33, 0x3B)),
-            "Violet Gradient" => (BlendToAbgr(0x8D, 0xA9, 0xE8, 0xC0, 0xB4, 0xFF, gradientPulse), ToAbgr(0x2A, 0x21, 0x40)),
+            "Gold Gradient" => (BlendToAbgr(0xD2, 0xA8, 0x57, 0xFF, 0xF0, 0xBF, gradientPulse), ToAbgr(0x2E, 0x24, 0x12)),
+            "Rose Gradient" => (BlendToAbgr(0xD8, 0x79, 0x86, 0xFF, 0xC7, 0xDE, gradientPulse), ToAbgr(0x3A, 0x20, 0x2D)),
+            "Cyan Gradient" => (BlendToAbgr(0x4C, 0xB8, 0xE8, 0xC7, 0xF7, 0xFF, gradientPulse), ToAbgr(0x1B, 0x33, 0x3B)),
+            "Violet Gradient" => (BlendToAbgr(0x6E, 0x86, 0xD8, 0xD1, 0xB9, 0xFF, gradientPulse), ToAbgr(0x2A, 0x21, 0x40)),
             "Rainbow Gradient" => (RainbowToAbgr(gradientPulse), ToAbgr(0x24, 0x24, 0x24)),
             "Gold Glow" => (ToAbgr(0xE5, 0xC3, 0x83), ToAbgr(0x3C, 0x2F, 0x15)),
             "Pink Glow" => (ToAbgr(0xF0, 0x8B, 0xBB), ToAbgr(0x3A, 0x1C, 0x39)),
@@ -250,6 +274,12 @@ public sealed class NameplateTitleService : IDisposable
         };
 
         return ToAbgr((byte)MathF.Round(r * 255f), (byte)MathF.Round(g * 255f), (byte)MathF.Round(b * 255f));
+    }
+
+    private static bool IsGradientPreset(string preset)
+    {
+        return !string.IsNullOrWhiteSpace(preset) &&
+               preset.Contains("Gradient", StringComparison.OrdinalIgnoreCase);
     }
 
     private string ResolveLocalColorPreset(string title)

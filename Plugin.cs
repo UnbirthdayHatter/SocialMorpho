@@ -51,6 +51,7 @@ public sealed class Plugin : IDalamudPlugin
     private TitleSyncService TitleSyncService { get; init; }
     private HousingActivityService HousingActivityService { get; init; }
     private NameplateTitleService NameplateTitleService { get; init; }
+    private DateTime nextGradientRedrawAtUtc = DateTime.MinValue;
 
     public Plugin(
         IDalamudPluginInterface pluginInterface,
@@ -146,6 +147,11 @@ public sealed class Plugin : IDalamudPlugin
     private void DrawUI()
     {
         TitleSyncService.Tick();
+        if (NameplateTitleService.ShouldAnimateGradientTitles() && DateTime.UtcNow >= nextGradientRedrawAtUtc)
+        {
+            NameplateTitleService.RequestRedraw();
+            nextGradientRedrawAtUtc = DateTime.UtcNow.AddMilliseconds(120);
+        }
         WindowSystem.Draw();
     }
 
