@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>SocialMorpho</AssemblyName>
     <RootNamespace>SocialMorpho</RootNamespace>
-    <Version>2.0.6</Version>
+    <Version>2.0.7</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -73,4 +73,5 @@
     <DalamudPackager ProjectDir="$(ProjectDir)" OutputPath="$(OutputPath)" AssemblyName="$(AssemblyName)" MakeZip="true" />
   </Target>
 </Project>
+
 
