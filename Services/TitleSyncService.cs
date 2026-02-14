@@ -21,6 +21,7 @@ public sealed class TitleSyncService : IDisposable
     private readonly Dictionary<string, SyncedTitleRecord> cache = new(StringComparer.OrdinalIgnoreCase);
     private DateTime nextPullAtUtc = DateTime.MinValue; // cloud pull schedule
     private DateTime nextHonorificPullAtUtc = DateTime.MinValue;
+    private DateTime nextHonorificPushAtUtc = DateTime.MinValue;
     private DateTime nextPushAtUtc = DateTime.MinValue;
     private DateTime nextHonorificCheckAtUtc = DateTime.MinValue;
     private DateTime cloudUnavailableUntilUtc = DateTime.MinValue;
@@ -60,13 +61,15 @@ public sealed class TitleSyncService : IDisposable
             this.nextHonorificCheckAtUtc = now.AddSeconds(30);
         }
 
+        if (cfg.ShareTitleSync && this.honorificBridgeActive && now >= this.nextHonorificPushAtUtc)
+        {
+            PushLocalTitleToHonorific();
+            this.nextHonorificPushAtUtc = now.AddSeconds(20);
+        }
+
         if (IsHonorificFallbackActive(cfg, now))
         {
-            if (cfg.ShareTitleSync && now >= this.nextPushAtUtc && !this.pushInFlight)
-            {
-                PushLocalTitleToHonorific();
-                this.nextPushAtUtc = now.AddSeconds(20);
-            }
+            // Fallback remains active for reads and cloud-failure resilience.
         }
         
         // Always keep Honorific cache fresh when available.
@@ -162,6 +165,7 @@ public sealed class TitleSyncService : IDisposable
     {
         this.nextPullAtUtc = DateTime.MinValue;
         this.nextHonorificPullAtUtc = DateTime.MinValue;
+        this.nextHonorificPushAtUtc = DateTime.MinValue;
         this.nextPushAtUtc = DateTime.MinValue;
         this.nextHonorificCheckAtUtc = DateTime.MinValue;
     }
