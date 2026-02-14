@@ -31,6 +31,7 @@ public sealed class TitleSyncService : IDisposable
     private bool pushInFlight;
     private DateTime lastPullErrorLogUtc = DateTime.MinValue;
     private DateTime lastPushErrorLogUtc = DateTime.MinValue;
+    private DateTime lastHonorificWarnUtc = DateTime.MinValue;
 
     public TitleSyncService(Plugin plugin, IClientState clientState, IObjectTable objectTable, IPluginLog log)
     {
@@ -158,8 +159,13 @@ public sealed class TitleSyncService : IDisposable
 
     private bool DetectHonorificBridgeAvailable()
     {
-        // Honorific exposes a Ready bool IPC call and Lightless consumes Honorific IPC.
-        return TryInvokeIpcFunc<bool>("Honorific.Ready", out var ready) && ready;
+        // Honorific API compatibility used by Lightless is 3.1+.
+        if (!TryInvokeIpcFunc<(uint major, uint minor)>("Honorific.ApiVersion", out var version))
+        {
+            return false;
+        }
+
+        return version.major == 3 && version.minor >= 1;
     }
 
     private bool IsHonorificFallbackActive(Configuration cfg, DateTime nowUtc)
@@ -199,9 +205,28 @@ public sealed class TitleSyncService : IDisposable
                 return;
             }
 
-            var escapedTitle = title.Replace("\"", "\\\"", StringComparison.Ordinal);
-            if (!this.plugin.TryRunCommandText($"/honorific force set \"{escapedTitle}\""))
+            if (!TryGetLocalObjectIndex(out var objectIndex))
             {
+                return;
+            }
+
+            // Primary path: direct IPC so Lightless observes normal Honorific title state.
+            var pushed = TryInvokeIpcAction<int, string>("Honorific.SetCharacterTitle", objectIndex, title);
+
+            // Last-resort fallback for older API variations.
+            if (!pushed)
+            {
+                var escapedTitle = title.Replace("\"", "\\\"", StringComparison.Ordinal);
+                pushed = this.plugin.TryRunCommandText($"/honorific force set \"{escapedTitle}\"");
+            }
+
+            if (!pushed)
+            {
+                if (DateTime.UtcNow - this.lastHonorificWarnUtc >= TimeSpan.FromMinutes(1))
+                {
+                    this.lastHonorificWarnUtc = DateTime.UtcNow;
+                    this.log.Warning("Honorific fallback active but SetCharacterTitle IPC failed.");
+                }
                 return;
             }
 
@@ -210,6 +235,38 @@ public sealed class TitleSyncService : IDisposable
         catch (Exception ex)
         {
             this.log.Warning($"Honorific handoff failed: {ex.Message}");
+        }
+    }
+
+    private bool TryGetLocalObjectIndex(out int objectIndex)
+    {
+        objectIndex = -1;
+        try
+        {
+            var player = this.objectTable.LocalPlayer;
+            if (player == null)
+            {
+                return false;
+            }
+
+            var prop = player.GetType().GetProperty("ObjectIndex", BindingFlags.Public | BindingFlags.Instance);
+            if (prop == null)
+            {
+                return false;
+            }
+
+            var raw = prop.GetValue(player);
+            if (raw == null)
+            {
+                return false;
+            }
+
+            objectIndex = Convert.ToInt32(raw);
+            return objectIndex >= 0;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -249,6 +306,43 @@ public sealed class TitleSyncService : IDisposable
             }
 
             return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool TryInvokeIpcAction<T1, T2>(string callGateName, T1 arg1, T2 arg2)
+    {
+        try
+        {
+            var method = this.plugin.PluginInterface.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(m => string.Equals(m.Name, "GetIpcSubscriber", StringComparison.Ordinal) &&
+                                     m.IsGenericMethodDefinition &&
+                                     m.GetGenericArguments().Length == 3 &&
+                                     m.GetParameters().Length == 1 &&
+                                     m.GetParameters()[0].ParameterType == typeof(string));
+            if (method == null)
+            {
+                return false;
+            }
+
+            var generic = method.MakeGenericMethod(typeof(T1), typeof(T2), typeof(object));
+            var subscriber = generic.Invoke(this.plugin.PluginInterface, [callGateName]);
+            if (subscriber == null)
+            {
+                return false;
+            }
+
+            var invokeAction = subscriber.GetType().GetMethod("InvokeAction", BindingFlags.Public | BindingFlags.Instance);
+            if (invokeAction == null)
+            {
+                return false;
+            }
+
+            invokeAction.Invoke(subscriber, [arg1, arg2]);
+            return true;
         }
         catch
         {
