@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace SocialMorpho.Services;
 
@@ -223,13 +224,6 @@ public sealed class TitleSyncService : IDisposable
 
             // Primary path: direct IPC so Lightless observes normal Honorific title state.
             var pushed = TryInvokeIpcAction<int, string>("Honorific.SetCharacterTitle", objectIndex, title);
-
-            // Last-resort fallback for older API variations.
-            if (!pushed)
-            {
-                var escapedTitle = title.Replace("\"", "\\\"", StringComparison.Ordinal);
-                pushed = this.plugin.TryRunCommandText($"/honorific force set \"{escapedTitle}\"");
-            }
 
             if (!pushed)
             {
@@ -540,6 +534,12 @@ public sealed class TitleSyncService : IDisposable
                 return parsedFromJson;
             }
 
+            var parsedLoose = TryExtractTitleFromLoosePayload(s);
+            if (!string.IsNullOrWhiteSpace(parsedLoose))
+            {
+                return parsedLoose;
+            }
+
             return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
         }
 
@@ -575,6 +575,12 @@ public sealed class TitleSyncService : IDisposable
             if (!string.IsNullOrWhiteSpace(parsedFromToString))
             {
                 return parsedFromToString;
+            }
+
+            var parsedLoose = TryExtractTitleFromLoosePayload(asText ?? string.Empty);
+            if (!string.IsNullOrWhiteSpace(parsedLoose))
+            {
+                return parsedLoose;
             }
 
             if (!string.IsNullOrWhiteSpace(asText))
@@ -646,6 +652,32 @@ public sealed class TitleSyncService : IDisposable
 
         var text = titleProp.GetString();
         return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    }
+
+    private static string? TryExtractTitleFromLoosePayload(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(input, "\\\"Title\\\"\\s*:\\s*\\\"(?<t>(?:\\\\.|[^\\\"])*)\\\"", RegexOptions.CultureInvariant);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var raw = match.Groups["t"].Value;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        // Unescape common JSON escapes seen in IPC payload strings.
+        var unescaped = raw.Replace("\\\"", "\"", StringComparison.Ordinal)
+            .Replace("\\\\", "\\", StringComparison.Ordinal)
+            .Trim();
+        return string.IsNullOrWhiteSpace(unescaped) ? null : unescaped;
     }
 
     private async Task PushLocalTitleAsync()
