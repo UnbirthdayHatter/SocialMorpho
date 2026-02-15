@@ -3,6 +3,7 @@ const MAX_COLOR_LEN = 32;
 const MAX_NAME_LEN = 32;
 const MAX_WORLD_LEN = 24;
 const MAX_BATCH = 100;
+const MAX_LEADERBOARD = 200;
 const TTL_SECONDS = 60 * 60 * 24 * 14; // 14 days
 
 export default {
@@ -40,6 +41,14 @@ export default {
 
       if (path === "/v1/title/batch" && request.method === "POST") {
         return handleBatch(request, env);
+      }
+
+      if (path === "/v1/leaderboard/update" && request.method === "POST") {
+        return handleLeaderboardUpdate(request, env);
+      }
+
+      if (path === "/v1/leaderboard/top" && request.method === "GET") {
+        return handleLeaderboardTop(url, env);
       }
 
       return json({ ok: false, error: "not_found" }, 404);
@@ -196,6 +205,115 @@ async function handleBatch(request, env) {
   return json({ ok: true, records: merged }, 200);
 }
 
+async function handleLeaderboardUpdate(request, env) {
+  const body = await request.json();
+  const parsed = normalizeLeaderboardPayload(body);
+  if (!parsed.ok) {
+    return json({ ok: false, error: "invalid_payload", details: parsed.errors }, 400);
+  }
+
+  const data = parsed.value;
+  const leaderboardKey = "leaderboard:all";
+  const entryKey = toKey(data.character, data.world || "unknown");
+
+  let rows = [];
+  try {
+    const raw = await env.TITLE_KV.get(leaderboardKey);
+    if (raw) {
+      const parsedRows = JSON.parse(raw);
+      rows = Array.isArray(parsedRows) ? parsedRows : [];
+    }
+  } catch {
+    rows = [];
+  }
+
+  const nextRow = {
+    key: entryKey,
+    displayName: data.displayName,
+    title: data.title,
+    colorPreset: data.colorPreset,
+    totalCompletions: data.totalCompletions,
+    reputationXp: data.reputationXp,
+    weeklyCompletions: data.weeklyCompletions,
+    updatedAtUtc: data.updatedAtUtc || new Date().toISOString(),
+  };
+
+  const filtered = rows.filter((r) => r && r.key !== entryKey);
+  filtered.push(nextRow);
+  filtered.sort((a, b) => {
+    const byCompletions = (b.totalCompletions || 0) - (a.totalCompletions || 0);
+    if (byCompletions !== 0) return byCompletions;
+    const byRep = (b.reputationXp || 0) - (a.reputationXp || 0);
+    if (byRep !== 0) return byRep;
+    return Date.parse(b.updatedAtUtc || 0) - Date.parse(a.updatedAtUtc || 0);
+  });
+
+  const compact = filtered.slice(0, MAX_LEADERBOARD).map((r) => ({
+    key: sanitize(r.key || "", 96),
+    displayName: sanitize(r.displayName || "", MAX_NAME_LEN),
+    title: sanitize(r.title || "", MAX_TITLE_LEN),
+    colorPreset: sanitize(r.colorPreset || "Gold", MAX_COLOR_LEN),
+    totalCompletions: Math.max(0, Number(r.totalCompletions || 0)),
+    reputationXp: Math.max(0, Number(r.reputationXp || 0)),
+    weeklyCompletions: Math.max(0, Number(r.weeklyCompletions || 0)),
+    updatedAtUtc: sanitize(r.updatedAtUtc || "", 40) || new Date().toISOString(),
+  }));
+
+  try {
+    await env.TITLE_KV.put(leaderboardKey, JSON.stringify(compact), { expirationTtl: TTL_SECONDS });
+  } catch (err) {
+    return json(
+      {
+        ok: false,
+        error: "kv_unavailable",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      503,
+    );
+  }
+
+  return json({ ok: true }, 200);
+}
+
+async function handleLeaderboardTop(url, env) {
+  const limitRaw = Number(url.searchParams.get("limit") || "25");
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, Math.floor(limitRaw))) : 25;
+  const leaderboardKey = "leaderboard:all";
+
+  let rows = [];
+  try {
+    const raw = await env.TITLE_KV.get(leaderboardKey);
+    if (raw) {
+      const parsedRows = JSON.parse(raw);
+      rows = Array.isArray(parsedRows) ? parsedRows : [];
+    }
+  } catch {
+    rows = [];
+  }
+
+  const entries = rows
+    .filter((r) => r && r.displayName)
+    .sort((a, b) => {
+      const byCompletions = (b.totalCompletions || 0) - (a.totalCompletions || 0);
+      if (byCompletions !== 0) return byCompletions;
+      const byRep = (b.reputationXp || 0) - (a.reputationXp || 0);
+      if (byRep !== 0) return byRep;
+      return Date.parse(b.updatedAtUtc || 0) - Date.parse(a.updatedAtUtc || 0);
+    })
+    .slice(0, limit)
+    .map((r) => ({
+      displayName: sanitize(r.displayName, MAX_NAME_LEN),
+      title: sanitize(r.title, MAX_TITLE_LEN),
+      colorPreset: sanitize(r.colorPreset, MAX_COLOR_LEN),
+      totalCompletions: Math.max(0, Number(r.totalCompletions || 0)),
+      reputationXp: Math.max(0, Number(r.reputationXp || 0)),
+      weeklyCompletions: Math.max(0, Number(r.weeklyCompletions || 0)),
+      updatedAtUtc: sanitize(r.updatedAtUtc, 40),
+    }));
+
+  return json({ ok: true, entries }, 200);
+}
+
 function normalizeUpdatePayload(body) {
   const errors = [];
   const character = sanitize(body?.character, MAX_NAME_LEN);
@@ -223,6 +341,51 @@ function normalizeUpdatePayload(body) {
   };
 }
 
+function normalizeLeaderboardPayload(body) {
+  const errors = [];
+  const character = sanitize(body?.character, MAX_NAME_LEN);
+  const world = sanitize(body?.world, MAX_WORLD_LEN);
+  const displayName = sanitize(body?.displayName, MAX_NAME_LEN);
+  const title = sanitize(body?.title, MAX_TITLE_LEN);
+  const colorPreset = sanitize(body?.colorPreset, MAX_COLOR_LEN);
+  const updatedAtUtc = sanitize(body?.updatedAtUtc, 40);
+  const totalCompletions = toSafeInt(body?.totalCompletions);
+  const reputationXp = toSafeInt(body?.reputationXp);
+  const weeklyCompletions = toSafeInt(body?.weeklyCompletions);
+
+  if (!character) errors.push("character_required");
+  if (!world) errors.push("world_required");
+  if (!displayName) errors.push("displayName_required");
+  if (!title) errors.push("title_required");
+  if (!colorPreset) errors.push("colorPreset_required");
+  if (totalCompletions < 0) errors.push("totalCompletions_invalid");
+  if (reputationXp < 0) errors.push("reputationXp_invalid");
+  if (weeklyCompletions < 0) errors.push("weeklyCompletions_invalid");
+
+  if (updatedAtUtc && Number.isNaN(Date.parse(updatedAtUtc))) {
+    errors.push("updatedAtUtc_invalid_iso8601");
+  }
+
+  if (errors.length) {
+    return { ok: false, errors };
+  }
+
+  return {
+    ok: true,
+    value: {
+      character,
+      world,
+      displayName,
+      title,
+      colorPreset,
+      totalCompletions,
+      reputationXp,
+      weeklyCompletions,
+      updatedAtUtc,
+    },
+  };
+}
+
 function sanitize(value, maxLen) {
   if (typeof value !== "string") {
     return "";
@@ -232,6 +395,15 @@ function sanitize(value, maxLen) {
     return "";
   }
   return trimmed.substring(0, maxLen);
+}
+
+function toSafeInt(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    return -1;
+  }
+
+  return Math.max(0, Math.floor(n));
 }
 
 function toKey(character, world) {

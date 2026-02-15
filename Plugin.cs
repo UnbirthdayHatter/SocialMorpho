@@ -481,6 +481,16 @@ public sealed class Plugin : IDalamudPlugin
             changed = true;
         }
 
+        if (Configuration.Version < 6)
+        {
+            Configuration.EnableCloudLeaderboard = false;
+            Configuration.ShareCloudLeaderboardStats = false;
+            Configuration.ShowCloudLeaderboard = true;
+            Configuration.HideWorldOnCloudLeaderboard = true;
+            Configuration.Version = 6;
+            changed = true;
+        }
+
         // Keep fallback always enabled so users do not need manual setup.
         if (!Configuration.PreferHonorificSync)
         {
@@ -599,6 +609,16 @@ public sealed class Plugin : IDalamudPlugin
     public IReadOnlyList<SyncedTitleLeaderboardEntry> GetRankedSyncedTitleSnapshot(int maxCount = 24)
     {
         return TitleSyncService.GetRankedSyncedTitleSnapshot(maxCount);
+    }
+
+    public IReadOnlyList<CloudLeaderboardEntry> GetCloudLeaderboardSnapshot(int maxCount = 25)
+    {
+        return TitleSyncService.GetCloudLeaderboardSnapshot(maxCount);
+    }
+
+    public void RequestCloudLeaderboardRefresh()
+    {
+        TitleSyncService.RequestCloudLeaderboardRefreshSoon();
     }
 
     public bool TryRunCommandText(string commandText)

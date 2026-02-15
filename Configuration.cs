@@ -44,6 +44,11 @@ public class Configuration : IPluginConfiguration
     public bool PreferHonorificSync { get; set; } = true;
     public string TitleSyncApiUrl { get; set; } = DefaultTitleSyncApiUrl;
     public string TitleSyncApiKey { get; set; } = string.Empty;
+    public bool EnableCloudLeaderboard { get; set; } = false;
+    public bool ShareCloudLeaderboardStats { get; set; } = false;
+    public bool ShowCloudLeaderboard { get; set; } = true;
+    public bool HideWorldOnCloudLeaderboard { get; set; } = true;
+    public string CloudLeaderboardAlias { get; set; } = string.Empty;
 
     // Quest Tracker settings
     public bool ShowQuestTracker { get; set; } = true;

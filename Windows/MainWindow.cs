@@ -232,6 +232,11 @@ public class MainWindow : Window, IDisposable
         bool enableTitleSync = Plugin.Configuration.EnableTitleSync;
         bool shareTitleSync = Plugin.Configuration.ShareTitleSync;
         bool showSyncedTitles = Plugin.Configuration.ShowSyncedTitles;
+        bool enableCloudLeaderboard = Plugin.Configuration.EnableCloudLeaderboard;
+        bool shareCloudLeaderboardStats = Plugin.Configuration.ShareCloudLeaderboardStats;
+        bool showCloudLeaderboard = Plugin.Configuration.ShowCloudLeaderboard;
+        bool hideWorldOnCloudLeaderboard = Plugin.Configuration.HideWorldOnCloudLeaderboard;
+        var cloudLeaderboardAlias = Plugin.Configuration.CloudLeaderboardAlias ?? string.Empty;
         bool enableQuestChains = Plugin.Configuration.EnableQuestChains;
         bool enableDuoSynergy = Plugin.Configuration.EnableDuoSynergy;
         var duoPartnerName = Plugin.Configuration.DuoPartnerName ?? string.Empty;
@@ -476,6 +481,53 @@ public class MainWindow : Window, IDisposable
                     Plugin.RequestTitleSyncNow();
                 }
 
+                ImGui.Separator();
+                ImGui.TextUnformatted("Cloud Leaderboard (Opt-In)");
+                ImGui.TextDisabled("Optional cross-player board using total completions and reputation.");
+
+                if (ImGui.Checkbox("Enable Cloud Leaderboard", ref enableCloudLeaderboard))
+                {
+                    Plugin.Configuration.EnableCloudLeaderboard = enableCloudLeaderboard;
+                    Plugin.Configuration.Save();
+                    if (enableCloudLeaderboard)
+                    {
+                        Plugin.RequestCloudLeaderboardRefresh();
+                    }
+                }
+
+                if (ImGui.Checkbox("Share My Stats To Cloud Leaderboard", ref shareCloudLeaderboardStats))
+                {
+                    Plugin.Configuration.ShareCloudLeaderboardStats = shareCloudLeaderboardStats;
+                    Plugin.Configuration.Save();
+                }
+
+                if (ImGui.Checkbox("Show Cloud Leaderboard", ref showCloudLeaderboard))
+                {
+                    Plugin.Configuration.ShowCloudLeaderboard = showCloudLeaderboard;
+                    Plugin.Configuration.Save();
+                    if (showCloudLeaderboard)
+                    {
+                        Plugin.RequestCloudLeaderboardRefresh();
+                    }
+                }
+
+                if (ImGui.InputText("Leaderboard Alias (optional)", ref cloudLeaderboardAlias, 32))
+                {
+                    Plugin.Configuration.CloudLeaderboardAlias = cloudLeaderboardAlias.Trim();
+                    Plugin.Configuration.Save();
+                }
+
+                if (ImGui.Checkbox("Hide World On Cloud Leaderboard", ref hideWorldOnCloudLeaderboard))
+                {
+                    Plugin.Configuration.HideWorldOnCloudLeaderboard = hideWorldOnCloudLeaderboard;
+                    Plugin.Configuration.Save();
+                }
+
+                if (ImGui.Button("Refresh Cloud Leaderboard"))
+                {
+                    Plugin.RequestCloudLeaderboardRefresh();
+                }
+
                 ImGui.TextDisabled($"Active provider: {Plugin.GetTitleSyncProviderLabel()}");
                 ImGui.TextDisabled("Cloud sync is primary. Honorific/Lightless activates after repeated cloud failures.");
 
@@ -496,6 +548,44 @@ public class MainWindow : Window, IDisposable
                     DrawStatRow("Last Honorific Push", health.LastHonorificPushUtc == DateTime.MinValue ? "-" : health.LastHonorificPushUtc.ToLocalTime().ToString("HH:mm:ss"));
                     DrawStatRow("Last Error", string.IsNullOrWhiteSpace(health.LastErrorSummary) ? "-" : health.LastErrorSummary);
                     ImGui.EndTable();
+                }
+
+                if (Plugin.Configuration.EnableCloudLeaderboard && Plugin.Configuration.ShowCloudLeaderboard)
+                {
+                    ImGui.Spacing();
+                    ImGui.TextUnformatted("Global Top (Cloud)");
+                    var cloudLeaders = Plugin.GetCloudLeaderboardSnapshot(25);
+                    if (cloudLeaders.Count == 0)
+                    {
+                        ImGui.TextDisabled("No cloud leaderboard entries yet.");
+                    }
+                    else if (ImGui.BeginTable("##CloudLeaderboard", 5, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+                    {
+                        ImGui.TableSetupColumn("#", ImGuiTableColumnFlags.WidthFixed, 24f);
+                        ImGui.TableSetupColumn("Player");
+                        ImGui.TableSetupColumn("Title");
+                        ImGui.TableSetupColumn("Completions");
+                        ImGui.TableSetupColumn("Rep XP");
+                        ImGui.TableHeadersRow();
+
+                        for (var i = 0; i < cloudLeaders.Count; i++)
+                        {
+                            var entry = cloudLeaders[i];
+                            ImGui.TableNextRow();
+                            ImGui.TableNextColumn();
+                            ImGui.TextUnformatted((i + 1).ToString());
+                            ImGui.TableNextColumn();
+                            ImGui.TextUnformatted(entry.DisplayName);
+                            ImGui.TableNextColumn();
+                            ImGui.TextUnformatted(entry.Title);
+                            ImGui.TableNextColumn();
+                            ImGui.TextUnformatted(entry.TotalCompletions.ToString());
+                            ImGui.TableNextColumn();
+                            ImGui.TextUnformatted(entry.ReputationXp.ToString());
+                        }
+
+                        ImGui.EndTable();
+                    }
                 }
             }
 

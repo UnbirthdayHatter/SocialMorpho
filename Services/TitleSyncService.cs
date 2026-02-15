@@ -49,6 +49,14 @@ public sealed class TitleSyncService : IDisposable
     private int idlePullBackoffStage;
     private int lastNearbyPlayerCount;
     private readonly Dictionary<string, SeenTracker> seenTrackers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<CloudLeaderboardEntry> cloudLeaderboardCache = new();
+    private DateTime nextCloudLeaderboardPullAtUtc = DateTime.MinValue;
+    private DateTime nextCloudLeaderboardPushAtUtc = DateTime.MinValue;
+    private DateTime lastCloudLeaderboardPullUtc = DateTime.MinValue;
+    private DateTime lastCloudLeaderboardPushUtc = DateTime.MinValue;
+    private bool cloudLeaderboardPullInFlight;
+    private bool cloudLeaderboardPushInFlight;
+    private string lastCloudLeaderboardPayloadHash = string.Empty;
 
     public TitleSyncService(Plugin plugin, IClientState clientState, IObjectTable objectTable, IPluginLog log)
     {
@@ -62,12 +70,27 @@ public sealed class TitleSyncService : IDisposable
     public void Tick()
     {
         var cfg = this.plugin.Configuration;
+        var now = DateTime.UtcNow;
+        if (cfg.EnableCloudLeaderboard)
+        {
+            if (cfg.ShareCloudLeaderboardStats && now >= this.nextCloudLeaderboardPushAtUtc && !this.cloudLeaderboardPushInFlight)
+            {
+                _ = PushCloudLeaderboardAsync();
+                this.nextCloudLeaderboardPushAtUtc = now.AddMinutes(5);
+            }
+
+            if (cfg.ShowCloudLeaderboard && now >= this.nextCloudLeaderboardPullAtUtc && !this.cloudLeaderboardPullInFlight)
+            {
+                _ = PullCloudLeaderboardAsync();
+                this.nextCloudLeaderboardPullAtUtc = now.AddMinutes(2);
+            }
+        }
+
         if (!cfg.EnableTitleSync)
         {
             return;
         }
 
-        var now = DateTime.UtcNow;
         if (now >= this.nextHonorificCheckAtUtc)
         {
             this.honorificBridgeActive = DetectHonorificBridgeAvailable();
@@ -159,6 +182,7 @@ public sealed class TitleSyncService : IDisposable
     public void RequestPushSoon()
     {
         this.nextPushAtUtc = DateTime.MinValue;
+        this.nextCloudLeaderboardPushAtUtc = DateTime.MinValue;
     }
 
     public bool IsHonorificBridgeActive => IsHonorificFallbackActive(this.plugin.Configuration, DateTime.UtcNow);
@@ -239,6 +263,22 @@ public sealed class TitleSyncService : IDisposable
             .ToList();
     }
 
+    public IReadOnlyList<CloudLeaderboardEntry> GetCloudLeaderboardSnapshot(int maxCount = 25)
+    {
+        return this.cloudLeaderboardCache
+            .OrderByDescending(e => e.TotalCompletions)
+            .ThenByDescending(e => e.ReputationXp)
+            .ThenByDescending(e => e.WeeklyCompletions)
+            .ThenByDescending(e => e.UpdatedAtUtc)
+            .Take(Math.Max(1, maxCount))
+            .ToList();
+    }
+
+    public void RequestCloudLeaderboardRefreshSoon()
+    {
+        this.nextCloudLeaderboardPullAtUtc = DateTime.MinValue;
+    }
+
     private void OnLogin()
     {
         this.nextPullAtUtc = DateTime.MinValue;
@@ -246,6 +286,8 @@ public sealed class TitleSyncService : IDisposable
         this.nextHonorificPushAtUtc = DateTime.MinValue;
         this.nextPushAtUtc = DateTime.MinValue;
         this.nextHonorificCheckAtUtc = DateTime.MinValue;
+        this.nextCloudLeaderboardPullAtUtc = DateTime.MinValue;
+        this.nextCloudLeaderboardPushAtUtc = DateTime.MinValue;
     }
 
     private bool DetectHonorificBridgeAvailable()
@@ -1148,6 +1190,168 @@ public sealed class TitleSyncService : IDisposable
         }
     }
 
+    private async Task PushCloudLeaderboardAsync()
+    {
+        var cfg = this.plugin.Configuration;
+        if (!cfg.EnableCloudLeaderboard || !cfg.ShareCloudLeaderboardStats)
+        {
+            return;
+        }
+
+        var baseUrl = cfg.TitleSyncApiUrl?.Trim();
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return;
+        }
+
+        if (!TryGetLocalCharacter(out var character, out var world))
+        {
+            return;
+        }
+
+        var stats = this.plugin.QuestManager.GetStats();
+        var displayName = string.IsNullOrWhiteSpace(cfg.CloudLeaderboardAlias) ? character : cfg.CloudLeaderboardAlias.Trim();
+        var title = string.IsNullOrWhiteSpace(stats.UnlockedTitle) ? "New Adventurer" : stats.UnlockedTitle.Trim();
+        var style = string.IsNullOrWhiteSpace(cfg.RewardTitleColorPreset) ? "Gold" : cfg.RewardTitleColorPreset.Trim();
+        var payloadFingerprint = $"{character}|{world}|{displayName}|{title}|{style}|{stats.TotalCompletions}|{stats.ReputationXp}|{stats.WeeklyCompletions}|{cfg.HideWorldOnCloudLeaderboard}";
+        if (string.Equals(payloadFingerprint, this.lastCloudLeaderboardPayloadHash, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        this.cloudLeaderboardPushInFlight = true;
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl.TrimEnd('/')}/v1/leaderboard/update");
+            req.Headers.TryAddWithoutValidation("x-client-version", GetClientVersion());
+
+            var payload = new CloudLeaderboardUpdateRequest
+            {
+                character = character,
+                world = world,
+                displayName = displayName,
+                title = title,
+                colorPreset = style,
+                totalCompletions = Math.Max(0, stats.TotalCompletions),
+                reputationXp = Math.Max(0, stats.ReputationXp),
+                weeklyCompletions = Math.Max(0, stats.WeeklyCompletions),
+                hideWorld = cfg.HideWorldOnCloudLeaderboard,
+                updatedAtUtc = DateTime.UtcNow.ToString("O"),
+            };
+
+            req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var res = await HttpClient.SendAsync(req).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (DateTime.UtcNow - this.lastPushErrorLogUtc >= TimeSpan.FromMinutes(2))
+                {
+                    this.lastPushErrorLogUtc = DateTime.UtcNow;
+                    this.log.Warning($"Leaderboard push failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
+                }
+
+                return;
+            }
+
+            this.lastCloudLeaderboardPayloadHash = payloadFingerprint;
+            this.lastCloudLeaderboardPushUtc = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            if (DateTime.UtcNow - this.lastPushErrorLogUtc >= TimeSpan.FromMinutes(2))
+            {
+                this.lastPushErrorLogUtc = DateTime.UtcNow;
+                this.log.Warning($"Leaderboard push failed: {ex.Message}");
+            }
+        }
+        finally
+        {
+            this.cloudLeaderboardPushInFlight = false;
+        }
+    }
+
+    private async Task PullCloudLeaderboardAsync()
+    {
+        var cfg = this.plugin.Configuration;
+        if (!cfg.EnableCloudLeaderboard || !cfg.ShowCloudLeaderboard)
+        {
+            return;
+        }
+
+        var baseUrl = cfg.TitleSyncApiUrl?.Trim();
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return;
+        }
+
+        this.cloudLeaderboardPullInFlight = true;
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl.TrimEnd('/')}/v1/leaderboard/top?limit=25");
+            req.Headers.TryAddWithoutValidation("x-client-version", GetClientVersion());
+            using var res = await HttpClient.SendAsync(req).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (DateTime.UtcNow - this.lastPullErrorLogUtc >= TimeSpan.FromMinutes(2))
+                {
+                    this.lastPullErrorLogUtc = DateTime.UtcNow;
+                    this.log.Warning($"Leaderboard pull failed HTTP {(int)res.StatusCode} ({baseUrl}): {body}");
+                }
+
+                return;
+            }
+
+            var json = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var parsed = JsonSerializer.Deserialize<CloudLeaderboardResponse>(json);
+            if (parsed?.entries == null)
+            {
+                return;
+            }
+
+            this.cloudLeaderboardCache.Clear();
+            foreach (var entry in parsed.entries)
+            {
+                if (entry == null || string.IsNullOrWhiteSpace(entry.displayName))
+                {
+                    continue;
+                }
+
+                var updatedAtUtc = DateTime.UtcNow;
+                if (!string.IsNullOrWhiteSpace(entry.updatedAtUtc) &&
+                    DateTime.TryParse(entry.updatedAtUtc, out var parsedTime))
+                {
+                    updatedAtUtc = parsedTime.ToUniversalTime();
+                }
+
+                this.cloudLeaderboardCache.Add(new CloudLeaderboardEntry
+                {
+                    DisplayName = entry.displayName.Trim(),
+                    Title = string.IsNullOrWhiteSpace(entry.title) ? "New Adventurer" : entry.title.Trim(),
+                    Style = string.IsNullOrWhiteSpace(entry.colorPreset) ? "Gold" : entry.colorPreset.Trim(),
+                    TotalCompletions = Math.Max(0, entry.totalCompletions),
+                    ReputationXp = Math.Max(0, entry.reputationXp),
+                    WeeklyCompletions = Math.Max(0, entry.weeklyCompletions),
+                    UpdatedAtUtc = updatedAtUtc,
+                });
+            }
+
+            this.lastCloudLeaderboardPullUtc = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            if (DateTime.UtcNow - this.lastPullErrorLogUtc >= TimeSpan.FromMinutes(2))
+            {
+                this.lastPullErrorLogUtc = DateTime.UtcNow;
+                this.log.Warning($"Leaderboard pull failed: {ex.Message}");
+            }
+        }
+        finally
+        {
+            this.cloudLeaderboardPullInFlight = false;
+        }
+    }
+
     private List<LookupPlayer> BuildNearbyPlayers()
     {
         var result = new List<LookupPlayer>(24);
@@ -1510,6 +1714,37 @@ public sealed class TitleSyncService : IDisposable
         public Dictionary<string, SyncedTitleRecord>? records { get; set; }
     }
 
+    private sealed class CloudLeaderboardResponse
+    {
+        public bool ok { get; set; }
+        public List<CloudLeaderboardWireEntry>? entries { get; set; }
+    }
+
+    private sealed class CloudLeaderboardUpdateRequest
+    {
+        public string character { get; set; } = string.Empty;
+        public string world { get; set; } = string.Empty;
+        public string displayName { get; set; } = string.Empty;
+        public string title { get; set; } = string.Empty;
+        public string colorPreset { get; set; } = "Gold";
+        public int totalCompletions { get; set; }
+        public int reputationXp { get; set; }
+        public int weeklyCompletions { get; set; }
+        public bool hideWorld { get; set; }
+        public string updatedAtUtc { get; set; } = string.Empty;
+    }
+
+    private sealed class CloudLeaderboardWireEntry
+    {
+        public string displayName { get; set; } = string.Empty;
+        public string title { get; set; } = string.Empty;
+        public string colorPreset { get; set; } = "Gold";
+        public int totalCompletions { get; set; }
+        public int reputationXp { get; set; }
+        public int weeklyCompletions { get; set; }
+        public string updatedAtUtc { get; set; } = string.Empty;
+    }
+
     private sealed class LookupPlayer
     {
         public string character { get; set; } = string.Empty;
@@ -1553,6 +1788,17 @@ public sealed class SyncedTitleLeaderboardEntry
     public int SeenCount { get; set; }
     public DateTime LastSeenUtc { get; set; }
     public double Score { get; set; }
+}
+
+public sealed class CloudLeaderboardEntry
+{
+    public string DisplayName { get; set; } = string.Empty;
+    public string Title { get; set; } = "New Adventurer";
+    public string Style { get; set; } = "Gold";
+    public int TotalCompletions { get; set; }
+    public int ReputationXp { get; set; }
+    public int WeeklyCompletions { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
 }
 
 internal sealed class SeenTracker
